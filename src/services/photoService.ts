@@ -2,6 +2,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system';
 import { Platform } from 'react-native';
+import EXIF from 'exif-js';
 import { Photo, PhotoLocation, SceneType } from '../types';
 import { detectScene, detectSceneWithConfidence } from './sceneDetector';
 import { reverseGeocode as amapReverseGeocode } from './amapService';
@@ -46,10 +47,9 @@ export async function pickPhotos(): Promise<PickedPhotoData[]> {
   for (const asset of result.assets) {
     let exif = asset.exif || undefined;
 
-    // On web, expo-image-picker may not return EXIF.
-    // Try to read EXIF from the file directly.
+    // On web, expo-image-picker doesn't read EXIF. Use exif-js.
     if (Platform.OS === 'web' && !exif) {
-      exif = await readExifFromWebAsset(asset.uri);
+      exif = await readExifFromWeb(asset.uri);
     }
 
     photos.push({
@@ -63,142 +63,46 @@ export async function pickPhotos(): Promise<PickedPhotoData[]> {
   return photos;
 }
 
-// Read EXIF from a web image file using fetch + manual parsing
-async function readExifFromWebAsset(uri: string): Promise<PickedPhotoData['exif']> {
-  try {
-    // For data URIs or blob URLs, fetch the file
-    const response = await fetch(uri);
-    const buffer = await response.arrayBuffer();
-    const view = new DataView(buffer);
+// Read EXIF from a web image using exif-js
+async function readExifFromWeb(uri: string): Promise<PickedPhotoData['exif']> {
+  return new Promise((resolve) => {
+    try {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          EXIF.getData(img as any, function(this: any) {
+            const lat = EXIF.getTag(this, 'GPSLatitude');
+            const lng = EXIF.getTag(this, 'GPSLongitude');
+            const latRef = EXIF.getTag(this, 'GPSLatitudeRef') || 'N';
+            const lngRef = EXIF.getTag(this, 'GPSLongitudeRef') || 'E';
+            const dateOriginal = EXIF.getTag(this, 'DateTimeOriginal');
+            const date = EXIF.getTag(this, 'DateTime');
 
-    // Check JPEG SOI marker
-    if (view.getUint16(0) !== 0xFFD8) return undefined;
-
-    let offset = 2;
-    while (offset < view.byteLength) {
-      const marker = view.getUint16(offset);
-
-      // APP1 marker (EXIF)
-      if (marker === 0xFFE1) {
-        const exifData = parseExifFromAPP1(view, offset);
-        if (exifData) return exifData;
-        break;
-      }
-
-      // Skip to next marker
-      if ((marker & 0xFF00) !== 0xFF00) break;
-      const length = view.getUint16(offset + 2);
-      offset += 2 + length;
-    }
-  } catch {}
-  return undefined;
-}
-
-// Parse EXIF from JPEG APP1 segment
-function parseExifFromAPP1(view: DataView, app1Offset: number): PickedPhotoData['exif'] | undefined {
-  try {
-    const exifHeaderOffset = app1Offset + 4; // skip marker (2) + length (2)
-    const exifStr = String.fromCharCode(
-      view.getUint8(exifHeaderOffset),
-      view.getUint8(exifHeaderOffset + 1),
-      view.getUint8(exifHeaderOffset + 2),
-      view.getUint8(exifHeaderOffset + 3),
-    );
-    if (exifStr !== 'Exif') return undefined;
-
-    const tiffOffset = exifHeaderOffset + 6; // skip "Exif\0\0"
-    const byteOrder = view.getUint16(tiffOffset);
-    const littleEndian = byteOrder === 0x4949;
-    const ifdOffset = view.getUint32(tiffOffset + 4, littleEndian);
-    const numEntries = view.getUint16(tiffOffset + ifdOffset, littleEndian);
-
-    const result: any = {};
-    for (let i = 0; i < numEntries; i++) {
-      const entryOffset = tiffOffset + ifdOffset + 2 + i * 12;
-      if (entryOffset + 12 > view.byteLength) break;
-      const tag = view.getUint16(entryOffset, littleEndian);
-      const type = view.getUint16(entryOffset + 2, littleEndian);
-      const count = view.getUint32(entryOffset + 4, littleEndian);
-      const valueOffset = entryOffset + 8;
-
-      // GPS Latitude Ref (tag 1 = GPSLatitudeRef in IFD GPS which is tag 0x8825, but let's read directly)
-      // We need GPS IFD. For simplicity, read known tags from the main IFD
-      if (tag === 0x0112) {
-        // Orientation
-        result.orientation = view.getUint16(valueOffset, littleEndian);
-      }
-    }
-
-    // Look for GPS IFD (tag 0x8825 in main IFD)
-    for (let i = 0; i < numEntries; i++) {
-      const entryOffset = tiffOffset + ifdOffset + 2 + i * 12;
-      if (entryOffset + 12 > view.byteLength) break;
-      const tag = view.getUint16(entryOffset, littleEndian);
-
-      if (tag === 0x8825) {
-        // GPS IFD pointer
-        const gpsIfdOffset = view.getUint32(entryOffset + 8, littleEndian);
-        const gpsNumEntries = view.getUint16(tiffOffset + gpsIfdOffset, littleEndian);
-        const gps: any = {};
-
-        for (let j = 0; j < gpsNumEntries; j++) {
-          const ge = tiffOffset + gpsIfdOffset + 2 + j * 12;
-          if (ge + 12 > view.byteLength) break;
-          const gTag = view.getUint16(ge, littleEndian);
-          const gType = view.getUint16(ge + 2, littleEndian);
-          const gCount = view.getUint32(ge + 4, littleEndian);
-
-          if (gTag === 1) { // GPSLatitudeRef
-            gps.GPSLatitudeRef = String.fromCharCode(view.getUint8(ge + 8));
-          } else if (gTag === 3) { // GPSLongitudeRef
-            gps.GPSLongitudeRef = String.fromCharCode(view.getUint8(ge + 8));
-          } else if (gTag === 2 || gTag === 4) { // GPSLatitude or GPSLongitude
-            // Type = 5 (Rational), count = 3, value is offset to 3 rationals
-            const rationalOffset = tiffOffset + view.getUint32(ge + 8, littleEndian);
-            const dms = [];
-            for (let k = 0; k < 3; k++) {
-              const num = view.getUint32(rationalOffset + k * 8, littleEndian);
-              const den = view.getUint32(rationalOffset + k * 8 + 4, littleEndian);
-              dms.push(den ? num / den : 0);
+            if (lat && lng) {
+              resolve({
+                GPSLatitude: lat,
+                GPSLongitude: lng,
+                GPSLatitudeRef: latRef,
+                GPSLongitudeRef: lngRef,
+                DateTimeOriginal: dateOriginal,
+                DateTime: date,
+              });
+            } else {
+              resolve(dateOriginal || date ? { DateTimeOriginal: dateOriginal, DateTime: date } : undefined);
             }
-            if (gTag === 2) gps.GPSLatitude = dms;
-            else gps.GPSLongitude = dms;
-          } else if (gTag === 29) { // GPSDatestamp
-            // ASCII string
-            let dateStr = '';
-            for (let c = 0; c < gCount - 1 && c < 10; c++) {
-              dateStr += String.fromCharCode(view.getUint8(ge + 8 + c));
-            }
-            gps.GPSDateStamp = dateStr;
-          }
+          });
+        } catch {
+          resolve(undefined);
         }
-
-        if (gps.GPSLatitude && gps.GPSLongitude) {
-          return gps;
-        }
-        break;
-      }
+      };
+      img.onerror = () => resolve(undefined);
+      // Must set crossOrigin before src for CORS images
+      img.crossOrigin = 'anonymous';
+      img.src = uri;
+    } catch {
+      resolve(undefined);
     }
-
-    // Read DateTime from main IFD
-    for (let i = 0; i < numEntries; i++) {
-      const entryOffset = tiffOffset + ifdOffset + 2 + i * 12;
-      if (entryOffset + 12 > view.byteLength) break;
-      const tag = view.getUint16(entryOffset, littleEndian);
-      if (tag === 0x9003 || tag === 0x0132) { // DateTimeOriginal or DateTime
-        let dateStr = '';
-        for (let c = 0; c < 19; c++) {
-          dateStr += String.fromCharCode(view.getUint8(entryOffset + 8 + c));
-        }
-        if (tag === 0x9003) result.DateTimeOriginal = dateStr;
-        else result.DateTime = dateStr;
-      }
-    }
-
-    return Object.keys(result).length > 0 ? result : undefined;
-  } catch {
-    return undefined;
-  }
+  });
 }
 
 // Take a photo with camera
