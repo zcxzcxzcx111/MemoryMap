@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { WebView } from 'react-native-webview';
+import { View, Text, StyleSheet, Platform } from 'react-native';
 import { SceneMarker, SceneType } from '../types';
 import { getCharacterInlineSVG } from './characters';
 import { preloadCharacterImages } from '../utils/imageToBase64';
@@ -13,13 +12,191 @@ interface WebMapViewProps {
 }
 
 export default function WebMapView({ markers, selectedIndex, onMarkerPress }: WebMapViewProps) {
-  const webViewRef = useRef<WebView>(null);
   const [characterImages, setCharacterImages] = useState<Partial<Record<SceneType, string>>>({});
 
-  // Preload character PNG images on mount
   useEffect(() => {
     preloadCharacterImages().then(setCharacterImages);
   }, []);
+
+  if (Platform.OS === 'web') {
+    return (
+      <DirectLeafletMap
+        markers={markers}
+        selectedIndex={selectedIndex}
+        onMarkerPress={onMarkerPress}
+        characterImages={characterImages}
+      />
+    );
+  }
+
+  // Native: use WebView
+  return (
+    <NativeWebViewMap
+      markers={markers}
+      selectedIndex={selectedIndex}
+      onMarkerPress={onMarkerPress}
+      characterImages={characterImages}
+    />
+  );
+}
+
+// ==================== Web: Direct Leaflet ====================
+
+function DirectLeafletMap({
+  markers,
+  selectedIndex,
+  onMarkerPress,
+  characterImages,
+}: WebMapViewProps & { characterImages: Partial<Record<SceneType, string>> }) {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<any>(null);
+  const markersLayerRef = useRef<any>(null);
+
+  // Load Leaflet CSS + JS once
+  useEffect(() => {
+    const id = 'leaflet-css';
+    if (!document.getElementById(id)) {
+      const link = document.createElement('link');
+      link.id = id;
+      link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(link);
+    }
+    if (!(window as any).L) {
+      const script = document.createElement('script');
+      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+      document.body.appendChild(script);
+    }
+  }, []);
+
+  // Initialize map
+  useEffect(() => {
+    const L = (window as any).L;
+    if (!L || !mapRef.current) return;
+
+    const map = L.map(mapRef.current, {
+      zoomControl: true,
+      attributionControl: false,
+    });
+
+    L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
+      subdomains: ['1', '2', '3', '4'],
+      maxZoom: 18,
+    }).addTo(map);
+
+    mapInstanceRef.current = map;
+    markersLayerRef.current = L.layerGroup().addTo(map);
+
+    return () => {
+      map.remove();
+    };
+  }, []);
+
+  // Update markers
+  useEffect(() => {
+    const L = (window as any).L;
+    if (!L || !mapInstanceRef.current || !markersLayerRef.current) return;
+
+    markersLayerRef.current.clearLayers();
+
+    const sceneEmoji: Record<string, string> = {
+      selfie: '\u{1F4F8}', rowing: '\u{1F6A3}', dining: '\u{1F468}‍\u{1F373}',
+      hiking: '\u{1F9D7}', shopping: '\u{1F483}', beach: '\u{1F3C4}',
+      park: '\u{1F333}', city: '\u{1F574}', travel: '\u{1F3C3}',
+      work: '\u{1F4BC}', home: '\u{1F3E0}',
+    };
+
+    const sceneSVGs: Record<string, string> = {};
+    (['selfie','rowing','dining','hiking','shopping','beach','park','city','travel','work','home'] as const).forEach(
+      (s) => { sceneSVGs[s] = getCharacterInlineSVG(s); }
+    );
+
+    const bounds = L.latLngBounds([]);
+
+    markers.forEach((m, i) => {
+      const [gcjLat, gcjLng] = wgs84ToGcj02(m.location.latitude, m.location.longitude);
+      bounds.extend([gcjLat, gcjLng]);
+      const isSelected = i === selectedIndex;
+      const size = isSelected ? 55 : 42;
+      const isDining = m.scene === 'dining';
+
+      let markerHTML: string;
+      if (isDining) {
+        const foodSize = isSelected ? 60 : 48;
+        markerHTML = `<div style="width:${foodSize}px;height:${foodSize * 1.3}px;display:flex;flex-direction:column;align-items:center;cursor:pointer;">
+          <div style="width:${foodSize - 8}px;height:${foodSize - 8}px;border-radius:50%;overflow:hidden;border:3px solid #FFB366;background:#FFF9E6;box-shadow:0 3px 6px rgba(0,0,0,0.2);position:relative;">
+          <img src="${m.photos[0]?.uri || ''}" style="width:100%;height:100%;object-fit:cover;" />
+          <div style="position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(255,179,102,0.15);mix-blend-mode:multiply;"></div>
+          <span style="position:absolute;top:-2px;right:-2px;font-size:14px;">✨</span>
+          </div>
+          <div style="width:16px;height:16px;background:#FF6B6B;border-radius:2px;transform:rotate(45deg);margin-top:-8px;box-shadow:0 2px 3px rgba(0,0,0,0.15);"></div>
+          <span style="font-size:16px;margin-top:-4px;">\u{1F35C}</span>
+          </div>`;
+      } else {
+        const imgData = characterImages[m.scene];
+        if (imgData) {
+          markerHTML = `<div style="width:${size}px;height:${size}px;border-radius:8px;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,0.15);">
+            <img src="${imgData}" style="width:100%;height:100%;border-radius:8px;object-fit:cover;" />
+            </div>`;
+        } else {
+          const svg = sceneSVGs[m.scene] || sceneSVGs.selfie;
+          markerHTML = `<div style="width:${size}px;height:${size}px;">${svg}</div>`;
+        }
+      }
+
+      let bubbleHTML = '';
+      if (isSelected) {
+        bubbleHTML = `<div style="width:8px;height:8px;background:#4ECDC4;border-radius:50%;margin:0 auto 4px;box-shadow:0 0 6px rgba(78,205,196,0.6);"></div>
+          <div style="background:white;border-radius:12px;padding:6px 10px;box-shadow:0 2px 6px rgba(0,0,0,0.15);text-align:center;max-width:130px;margin-bottom:4px;font-family:-apple-system,sans-serif;">
+          <div style="font-size:14px;">${sceneEmoji[m.scene] || ''}</div>
+          ${m.location.placeName ? `<div style="font-size:11px;color:#4ECDC4;font-weight:400;">${escapeHtml(m.location.placeName)}</div>` : ''}
+          <div style="font-size:11px;color:#666;margin-top:2px;">${formatDate(m.date)}</div>
+          <div style="font-size:12px;color:#333;font-weight:600;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(m.description)}</div>
+          </div>`;
+      }
+
+      const icon = L.divIcon({
+        className: 'marker-wrapper' + (isSelected ? ' selected' : ''),
+        html: `<div style="display:flex;flex-direction:column;align-items:center;animation:float 3s ease-in-out infinite;${isSelected ? '' : `animation-delay:${i * 0.2}s;`}">${bubbleHTML}${markerHTML}</div>`,
+        iconSize: [70, isSelected ? 120 : 70],
+        iconAnchor: [35, isSelected ? 120 : 70],
+      });
+
+      L.marker([gcjLat, gcjLng], { icon }).addTo(markersLayerRef.current)
+        .on('click', () => onMarkerPress(i));
+    });
+
+    if (markers.length > 0) {
+      mapInstanceRef.current.fitBounds(bounds.pad(0.3));
+    } else {
+      mapInstanceRef.current.setView([31.0, 121.0], 8);
+    }
+  }, [markers, selectedIndex, characterImages, onMarkerPress]);
+
+  return (
+    <View style={styles.container}>
+      <div ref={mapRef} style={{ width: '100%', height: '100%', flex: 1 }} />
+      <View style={styles.infoRow}>
+        <Text style={styles.infoText}>{markers.length} 个地点</Text>
+        <Text style={styles.infoText}>
+          {markers.filter((m) => m.scene === 'dining').length > 0 && '\u{1F37D} 美食标记 · '}
+          双指缩放 / 拖拽查看
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+// ==================== Native: WebView ====================
+
+function NativeWebViewMap({
+  markers,
+  selectedIndex,
+  onMarkerPress,
+  characterImages,
+}: WebMapViewProps & { characterImages: Partial<Record<SceneType, string>> }) {
+  const { WebView } = require('react-native-webview');
+  const webViewRef = useRef<any>(null);
 
   const handleMessage = useCallback(
     (event: any) => {
@@ -60,6 +237,19 @@ export default function WebMapView({ markers, selectedIndex, onMarkerPress }: We
   );
 }
 
+// ==================== Helpers ====================
+
+function formatDate(dateStr: string) {
+  const d = new Date(dateStr);
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+function escapeHtml(str: string) {
+  const div = document.createElement('div');
+  div.appendChild(document.createTextNode(str));
+  return div.innerHTML;
+}
+
 function buildMapHTML(
   markers: SceneMarker[],
   selectedIndex: number,
@@ -67,24 +257,24 @@ function buildMapHTML(
 ): string {
   const markersJSON = JSON.stringify(
     markers.map((m, i) => {
-      // GPS 坐标 (WGS-84) → 高德坐标 (GCJ-02)
       const [gcjLat, gcjLng] = wgs84ToGcj02(m.location.latitude, m.location.longitude);
       return {
-        lat: gcjLat,
-        lng: gcjLng,
-        scene: m.scene,
-        description: m.description,
-        date: m.date,
+        lat: gcjLat, lng: gcjLng, scene: m.scene,
+        description: m.description, date: m.date,
         photoUri: m.photos[0]?.uri || '',
         placeName: m.location.placeName || '',
-        index: i,
-        isSelected: i === selectedIndex,
+        index: i, isSelected: i === selectedIndex,
       };
     })
   );
 
-  // Build character images map for injection into HTML
   const imagesJSON = JSON.stringify(characterImages);
+
+  const characterSVGs = Object.fromEntries(
+    (['selfie','rowing','dining','hiking','shopping','beach','park','city','travel','work','home'] as const).map(
+      (s) => [s, getCharacterInlineSVG(s)]
+    )
+  );
 
   return `
 <!DOCTYPE html>
@@ -98,24 +288,8 @@ function buildMapHTML(
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { width: 100%; height: 100%; overflow: hidden; }
     #map { width: 100%; height: 100%; }
-    .leaflet-control-zoom { border-radius: 12px !important; overflow: hidden; }
-    .leaflet-control-zoom a { width: 36px !important; height: 36px !important; line-height: 36px !important; font-size: 18px !important; }
     .marker-wrapper { cursor: pointer; transition: transform 0.2s; }
     .marker-wrapper:hover { transform: scale(1.1); }
-    .marker-wrapper.selected { z-index: 1000 !important; }
-    .marker-bubble {
-      background: white; border-radius: 12px; padding: 6px 10px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.15); text-align: center;
-      max-width: 130px; margin-bottom: 4px; font-family: -apple-system, sans-serif;
-    }
-    .marker-bubble .emoji { font-size: 14px; }
-    .marker-bubble .date { font-size: 11px; color: #666; margin-top: 2px; }
-    .marker-bubble .desc { font-size: 12px; color: #333; font-weight: 600; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .selected-indicator {
-      width: 8px; height: 8px; background: #4ECDC4; border-radius: 50%;
-      margin: 0 auto 4px; box-shadow: 0 0 6px rgba(78,205,196,0.6);
-    }
-    .char-img { border-radius: 8px; object-fit: cover; }
     @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
   </style>
 </head>
@@ -124,116 +298,22 @@ function buildMapHTML(
   <script>
     var markersData = ${markersJSON};
     var characterImages = ${imagesJSON};
-    var sceneEmoji = {
-      selfie: '\\u{1F4F8}', rowing: '\\u{1F6A3}', dining: '\\u{1F468}\\u200D\\u{1F373}',
-      hiking: '\\u{1F9D7}', shopping: '\\u{1F483}', beach: '\\u{1F3C4}',
-      park: '\\u{1F333}', city: '\\u{1F574}', travel: '\\u{1F3C3}',
-      work: '\\u{1F4BC}', home: '\\u{1F3E0}'
-    };
-
-    var characterSVGs = ${JSON.stringify(
-      Object.fromEntries(
-        (['selfie','rowing','dining','hiking','shopping','beach','park','city','travel','work','home'] as const).map(
-          (s) => [s, getCharacterInlineSVG(s)]
-        )
-      )
-    )};
-
-    // Initialize map
-    var map = L.map('map', {
-      zoomControl: true,
-      attributionControl: false,
-    });
-
-    L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
-      subdomains: ['1', '2', '3', '4'],
-      maxZoom: 18,
-    }).addTo(map);
-
-    // Fit bounds to markers
-    if (markersData.length > 0) {
-      var bounds = L.latLngBounds(markersData.map(function(m) { return [m.lat, m.lng]; }));
-      map.fitBounds(bounds.pad(0.3));
-    } else {
-      map.setView([31.0, 121.0], 8);
-    }
-
-    // Create markers
+    var sceneEmoji = { selfie:'\\u{1F4F8}',rowing:'\\u{1F6A3}',dining:'\\u{1F468}\\u200D\\u{1F373}',hiking:'\\u{1F9D7}',shopping:'\\u{1F483}',beach:'\\u{1F3C4}',park:'\\u{1F333}',city:'\\u{1F574}',travel:'\\u{1F3C3}',work:'\\u{1F4BC}',home:'\\u{1F3E0}' };
+    var characterSVGs = ${JSON.stringify(characterSVGs)};
+    var map = L.map('map', { zoomControl: true, attributionControl: false });
+    L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', { subdomains: ['1','2','3','4'], maxZoom: 18 }).addTo(map);
+    if (markersData.length > 0) { var b = L.latLngBounds(markersData.map(function(m){return[m.lat,m.lng]})); map.fitBounds(b.pad(0.3)); } else { map.setView([31.0,121.0],8); }
     markersData.forEach(function(m) {
-      var isSelected = m.isSelected;
-      var size = isSelected ? 55 : 42;
-      var isDining = m.scene === 'dining';
-
-      var markerHTML;
-      if (isDining) {
-        var foodSize = isSelected ? 60 : 48;
-        markerHTML = '<div style="width:' + foodSize + 'px;height:' + (foodSize * 1.3) + 'px;display:flex;flex-direction:column;align-items:center;cursor:pointer;">' +
-          '<div style="width:' + (foodSize - 8) + 'px;height:' + (foodSize - 8) + 'px;border-radius:50%;overflow:hidden;border:3px solid #FFB366;background:#FFF9E6;box-shadow:0 3px 6px rgba(0,0,0,0.2);position:relative;">' +
-          '<img src="' + m.photoUri + '" style="width:100%;height:100%;object-fit:cover;" />' +
-          '<div style="position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(255,179,102,0.15);mix-blend-mode:multiply;"></div>' +
-          '<span style="position:absolute;top:-2px;right:-2px;font-size:14px;">\\u2728</span>' +
-          '<span style="position:absolute;top:2px;left:-4px;font-size:10px;">\\u2728</span>' +
-          '<span style="position:absolute;bottom:8px;right:-4px;font-size:12px;color:#FFD700;">\\u2605</span>' +
-          '</div>' +
-          '<div style="width:16px;height:16px;background:#FF6B6B;border-radius:2px;transform:rotate(45deg);margin-top:-8px;box-shadow:0 2px 3px rgba(0,0,0,0.15);"></div>' +
-          '<span style="font-size:16px;margin-top:-4px;">\\u{1F35C}</span>' +
-          '</div>';
-      } else {
-        // Use PNG image if available, fallback to SVG
-        var imgData = characterImages[m.scene];
-        if (imgData) {
-          markerHTML = '<div style="width:' + size + 'px;height:' + size + 'px;border-radius:8px;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,0.15);">' +
-            '<img src="' + imgData + '" class="char-img" style="width:100%;height:100%;" />' +
-            '</div>';
-        } else {
-          var svgContent = characterSVGs[m.scene] || characterSVGs.selfie;
-          markerHTML = '<div style="width:' + size + 'px;height:' + size + 'px;">' + svgContent + '</div>';
-        }
-      }
-
-      // Add bubble for selected
-      var bubbleHTML = '';
-      if (isSelected) {
-        bubbleHTML = '<div class="selected-indicator"></div>' +
-          '<div class="marker-bubble">' +
-          '<div class="emoji">' + (sceneEmoji[m.scene] || '') + '</div>' +
-          (m.placeName ? '<div class="desc" style="font-size:11px;color:#4ECDC4;font-weight:400;">' + escapeHtml(m.placeName) + '</div>' : '') +
-          '<div class="date">' + formatDate(m.date) + '</div>' +
-          '<div class="desc">' + escapeHtml(m.description) + '</div>' +
-          '</div>';
-      }
-
-      var icon = L.divIcon({
-        className: 'marker-wrapper' + (isSelected ? ' selected' : ''),
-        html: '<div style="display:flex;flex-direction:column;align-items:center;animation:float 3s ease-in-out infinite;' +
-          (isSelected ? '' : 'animation-delay:' + (m.index * 0.2) + 's;') +
-          '">' + bubbleHTML + markerHTML + '</div>',
-        iconSize: [70, isSelected ? 120 : 70],
-        iconAnchor: [35, isSelected ? 120 : 70],
-      });
-
-      var marker = L.marker([m.lat, m.lng], { icon: icon }).addTo(map);
-      marker.on('click', function() {
-        if (window.ReactNativeWebView) {
-          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'markerPress', index: m.index }));
-        }
-      });
+      var sel = m.isSelected, sz = sel?55:42, isD = m.scene==='dining', mh;
+      if(isD){ var fs=sel?60:48; mh='<div style="width:'+fs+'px;height:'+(fs*1.3)+'px;display:flex;flex-direction:column;align-items:center;cursor:pointer;"><div style="width:'+(fs-8)+'px;height:'+(fs-8)+'px;border-radius:50%;overflow:hidden;border:3px solid #FFB366;background:#FFF9E6;box-shadow:0 3px 6px rgba(0,0,0,0.2);"><img src="'+m.photoUri+'" style="width:100%;height:100%;object-fit:cover;"/></div><div style="width:16px;height:16px;background:#FF6B6B;border-radius:2px;transform:rotate(45deg);margin-top:-8px;"></div></div>'; }
+      else { var id=characterImages[m.scene]; if(id){ mh='<div style="width:'+sz+'px;height:'+sz+'px;border-radius:8px;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,0.15);"><img src="'+id+'" style="width:100%;height:100%;border-radius:8px;object-fit:cover;"/></div>'; } else { var sv=characterSVGs[m.scene]||characterSVGs.selfie; mh='<div style="width:'+sz+'px;height:'+sz+'px;">'+sv+'</div>'; } }
+      var bh=''; if(sel){ bh='<div style="width:8px;height:8px;background:#4ECDC4;border-radius:50%;margin:0 auto 4px;box-shadow:0 0 6px rgba(78,205,196,0.6);"></div><div style="background:white;border-radius:12px;padding:6px 10px;box-shadow:0 2px 6px rgba(0,0,0,0.15);text-align:center;max-width:130px;margin-bottom:4px;font-family:-apple-system,sans-serif;"><div style="font-size:14px;">'+(sceneEmoji[m.scene]||'')+'</div>'+(m.placeName?'<div style="font-size:11px;color:#4ECDC4;font-weight:400;">'+m.placeName+'</div>':'')+'<div style="font-size:11px;color:#666;margin-top:2px;">'+(new Date(m.date).getMonth()+1)+'/'+new Date(m.date).getDate()+'</div><div style="font-size:12px;color:#333;font-weight:600;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+m.description+'</div></div>'; }
+      var icon = L.divIcon({ className:'marker-wrapper'+(sel?' selected':''), html:'<div style="display:flex;flex-direction:column;align-items:center;animation:float 3s ease-in-out infinite;'+(sel?'':'animation-delay:'+m.index*0.2+'s;')+'">'+bh+mh+'</div>', iconSize:[70,sel?120:70], iconAnchor:[35,sel?120:70] });
+      L.marker([m.lat,m.lng],{icon:icon}).addTo(map).on('click',function(){ if(window.ReactNativeWebView){window.ReactNativeWebView.postMessage(JSON.stringify({type:'markerPress',index:m.index}));} });
     });
-
-    function formatDate(dateStr) {
-      var d = new Date(dateStr);
-      return (d.getMonth() + 1) + '/' + d.getDate();
-    }
-
-    function escapeHtml(str) {
-      var div = document.createElement('div');
-      div.appendChild(document.createTextNode(str));
-      return div.innerHTML;
-    }
   </script>
 </body>
-</html>
-  `;
+</html>`;
 }
 
 const styles = StyleSheet.create({
