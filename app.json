@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "MemoryMap",
+    "slug": "MemoryMap",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "name": "MemoryMap - 你的回忆地图",
+      "shortName": "MemoryMap",
+      "description": "在地图上记录你的每一段旅程回忆",
+      "backgroundColor": "#ffffff",
+      "themeColor": "#4ECDC4",
+      "display": "standalone",
+      "orientation": "portrait",
+      "scope": "/",
+      "startUrl": "/"
+    }
+  }
+}
