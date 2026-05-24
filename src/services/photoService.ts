@@ -31,7 +31,6 @@ export async function pickPhotos(): Promise<PickedPhotoData[]> {
   }
 
   const result = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ['images'],
     allowsMultipleSelection: true,
     quality: 0.8,
     exif: true,
