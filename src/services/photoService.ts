@@ -44,20 +44,19 @@ export async function pickPhotos(): Promise<PickedPhotoData[]> {
 
   for (const asset of result.assets) {
     let exif = asset.exif || undefined;
-
-    console.log('[EXIF] Platform:', Platform.OS);
-    console.log('[EXIF] asset.exif:', JSON.stringify(asset.exif));
-    console.log('[EXIF] asset.uri:', asset.uri?.substring(0, 80));
+    let uri = asset.uri;
 
     // On web, expo-image-picker doesn't read EXIF. Parse binary JPEG.
-    if (Platform.OS === 'web' && !exif) {
-      console.log('[EXIF] Trying binary parse...');
-      exif = await readExifFromWeb(asset.uri);
-      console.log('[EXIF] Binary parse result:', JSON.stringify(exif));
+    // Also convert blob URL to base64 data URI so it persists.
+    if (Platform.OS === 'web') {
+      if (!exif) {
+        exif = await readExifFromWeb(asset.uri);
+      }
+      uri = await blobToDataUri(asset.uri);
     }
 
     photos.push({
-      uri: asset.uri,
+      uri,
       width: asset.width,
       height: asset.height,
       exif,
@@ -65,6 +64,22 @@ export async function pickPhotos(): Promise<PickedPhotoData[]> {
   }
 
   return photos;
+}
+
+// Convert blob URL to base64 data URI (so it persists across sessions on web)
+async function blobToDataUri(uri: string): Promise<string> {
+  try {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return uri; // fallback to original
+  }
 }
 
 // Read EXIF from a web image by parsing binary JPEG data
@@ -256,8 +271,12 @@ export async function takePhoto(): Promise<PickedPhotoData | null> {
   }
 
   const asset = result.assets[0];
+  let uri = asset.uri;
+  if (Platform.OS === 'web') {
+    uri = await blobToDataUri(asset.uri);
+  }
   return {
-    uri: asset.uri,
+    uri,
     width: asset.width,
     height: asset.height,
     exif: asset.exif || undefined,
