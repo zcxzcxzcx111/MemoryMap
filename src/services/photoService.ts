@@ -23,16 +23,20 @@ export interface PickedPhotoData {
 
 // Request permissions and pick photos from gallery
 export async function pickPhotos(): Promise<PickedPhotoData[]> {
-  if (Platform.OS !== 'web') {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      throw new Error('需要相册访问权限才能选择照片');
-    }
+  // On web, use native <input> to get original file with EXIF intact
+  if (Platform.OS === 'web') {
+    return pickPhotosWeb();
+  }
+
+  const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (status !== 'granted') {
+    throw new Error('需要相册访问权限才能选择照片');
   }
 
   const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ['images'],
     allowsMultipleSelection: true,
-    quality: Platform.OS === 'web' ? 1 : 0.8, // Web: don't re-encode (keeps EXIF)
+    quality: 0.8,
     exif: true,
   });
 
@@ -40,31 +44,61 @@ export async function pickPhotos(): Promise<PickedPhotoData[]> {
     return [];
   }
 
-  const photos: PickedPhotoData[] = [];
+  return result.assets.map((asset) => ({
+    uri: asset.uri,
+    width: asset.width,
+    height: asset.height,
+    exif: asset.exif || undefined,
+  }));
+}
 
-  for (const asset of result.assets) {
-    let exif = asset.exif || undefined;
-    let uri = asset.uri;
+// Web: use <input type="file"> to get original files with EXIF data
+async function pickPhotosWeb(): Promise<PickedPhotoData[]> {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.multiple = true;
+    input.onchange = async () => {
+      const files = Array.from(input.files || []);
+      if (files.length === 0) { resolve([]); return; }
 
-    // On web, expo-image-picker doesn't read EXIF.
-    // Convert blob URL to data URI AND extract EXIF in one pass.
-    if (Platform.OS === 'web') {
-      const { dataUri, exifData } = await webProcessImage(asset.uri);
-      uri = dataUri;
-      if (!exif && exifData) {
-        exif = exifData;
+      const photos: PickedPhotoData[] = [];
+      for (const file of files) {
+        // Read as ArrayBuffer for EXIF parsing
+        const buffer = await file.arrayBuffer();
+        const view = new DataView(buffer);
+        let exif: PickedPhotoData['exif'] = undefined;
+        if (view.byteLength >= 4 && view.getUint16(0) === 0xFFD8) {
+          exif = parseExifFromBuffer(view);
+        }
+
+        // Read as data URI
+        const uri = await new Promise<string>((res) => {
+          const reader = new FileReader();
+          reader.onloadend = () => res(reader.result as string);
+          reader.readAsDataURL(file);
+        });
+
+        // Get image dimensions
+        const dims = await getImageDimensions(uri);
+
+        console.log('[EXIF] File:', file.name, 'EXIF:', exif ? JSON.stringify(exif) : 'none');
+        photos.push({ uri, width: dims.w, height: dims.h, exif });
       }
-    }
+      resolve(photos);
+    };
+    input.click();
+  });
+}
 
-    photos.push({
-      uri,
-      width: asset.width,
-      height: asset.height,
-      exif,
-    });
-  }
-
-  return photos;
+function getImageDimensions(uri: string): Promise<{ w: number; h: number }> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+    img.onerror = () => resolve({ w: 0, h: 0 });
+    img.src = uri;
+  });
 }
 
 // On web: convert blob URL to data URI + extract EXIF in a single read
