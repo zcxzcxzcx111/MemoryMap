@@ -46,13 +46,14 @@ export async function pickPhotos(): Promise<PickedPhotoData[]> {
     let exif = asset.exif || undefined;
     let uri = asset.uri;
 
-    // On web, expo-image-picker doesn't read EXIF. Parse binary JPEG.
-    // Also convert blob URL to base64 data URI so it persists.
+    // On web, expo-image-picker doesn't read EXIF.
+    // Convert blob URL to data URI AND extract EXIF in one pass.
     if (Platform.OS === 'web') {
-      if (!exif) {
-        exif = await readExifFromWeb(asset.uri);
+      const { dataUri, exifData } = await webProcessImage(asset.uri);
+      uri = dataUri;
+      if (!exif && exifData) {
+        exif = exifData;
       }
-      uri = await blobToDataUri(asset.uri);
     }
 
     photos.push({
@@ -66,19 +67,33 @@ export async function pickPhotos(): Promise<PickedPhotoData[]> {
   return photos;
 }
 
-// Convert blob URL to base64 data URI (so it persists across sessions on web)
-async function blobToDataUri(uri: string): Promise<string> {
+// On web: convert blob URL to data URI + extract EXIF in a single read
+async function webProcessImage(uri: string): Promise<{ dataUri: string; exifData?: PickedPhotoData['exif'] }> {
   try {
     const response = await fetch(uri);
     const blob = await response.blob();
-    return new Promise((resolve, reject) => {
+    const buffer = await blob.arrayBuffer();
+    const view = new DataView(buffer);
+
+    // Parse EXIF from the binary data
+    let exifData: PickedPhotoData['exif'] = undefined;
+    if (view.byteLength >= 4 && view.getUint16(0) === 0xFFD8) {
+      exifData = parseExifFromBuffer(view);
+      console.log('[EXIF] Parsed:', exifData ? JSON.stringify(exifData) : 'no GPS found');
+    }
+
+    // Convert to data URI
+    const dataUri = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onloadend = () => resolve(reader.result as string);
       reader.onerror = reject;
       reader.readAsDataURL(blob);
     });
-  } catch {
-    return uri; // fallback to original
+
+    return { dataUri, exifData };
+  } catch (e) {
+    console.log('[EXIF] Error:', e);
+    return { dataUri: uri };
   }
 }
 
@@ -89,13 +104,13 @@ async function readExifFromWeb(uri: string): Promise<PickedPhotoData['exif']> {
     const buffer = await response.arrayBuffer();
     const view = new DataView(buffer);
 
-    console.log('[EXIF] File size:', buffer.byteLength, 'First bytes:', view.getUint16(0).toString(16));
+    if (view.byteLength < 4 || view.getUint16(0) !== 0xFFD8) return undefined;
+    return parseExifFromBuffer(view);
+  } catch { return undefined; }
+}
 
-    // Check JPEG SOI marker
-    if (view.byteLength < 4 || view.getUint16(0) !== 0xFFD8) {
-      console.log('[EXIF] Not a JPEG file');
-      return undefined;
-    }
+function parseExifFromBuffer(view: DataView): PickedPhotoData['exif'] {
+  try {
 
     let offset = 2;
     while (offset < view.byteLength - 4) {
@@ -273,7 +288,15 @@ export async function takePhoto(): Promise<PickedPhotoData | null> {
   const asset = result.assets[0];
   let uri = asset.uri;
   if (Platform.OS === 'web') {
-    uri = await blobToDataUri(asset.uri);
+    try {
+      const resp = await fetch(asset.uri);
+      const blob = await resp.blob();
+      uri = await new Promise<string>((resolve) => {
+        const r = new FileReader();
+        r.onloadend = () => resolve(r.result as string);
+        r.readAsDataURL(blob);
+      });
+    } catch {}
   }
   return {
     uri,
