@@ -51,28 +51,45 @@ function DirectLeafletMap({
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const markersLayerRef = useRef<any>(null);
+  const [leafletReady, setLeafletReady] = useState(false);
 
   // Load Leaflet CSS + JS once
   useEffect(() => {
-    const id = 'leaflet-css';
-    if (!document.getElementById(id)) {
+    // CSS
+    if (!document.getElementById('leaflet-css')) {
       const link = document.createElement('link');
-      link.id = id;
+      link.id = 'leaflet-css';
       link.rel = 'stylesheet';
       link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
       document.head.appendChild(link);
     }
-    if (!(window as any).L) {
-      const script = document.createElement('script');
-      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-      document.body.appendChild(script);
+
+    // JS
+    if ((window as any).L) {
+      setLeafletReady(true);
+      return;
     }
+
+    const existing = document.querySelector('script[src*="leaflet"]');
+    if (existing) {
+      existing.addEventListener('load', () => setLeafletReady(true));
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.onload = () => setLeafletReady(true);
+    document.body.appendChild(script);
   }, []);
 
-  // Initialize map
+  // Initialize map (runs once after Leaflet is loaded)
   useEffect(() => {
+    if (!leafletReady) return;
     const L = (window as any).L;
     if (!L || !mapRef.current) return;
+
+    // Avoid creating duplicate map
+    if (mapInstanceRef.current) return;
 
     const map = L.map(mapRef.current, {
       zoomControl: true,
@@ -89,8 +106,9 @@ function DirectLeafletMap({
 
     return () => {
       map.remove();
+      mapInstanceRef.current = null;
     };
-  }, []);
+  }, [leafletReady]);
 
   // Update markers
   useEffect(() => {
