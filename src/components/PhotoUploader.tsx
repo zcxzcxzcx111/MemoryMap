@@ -18,6 +18,7 @@ import {
   processPickedPhoto,
   extractLocation,
   extractDate,
+  getCurrentLocation,
   PickedPhotoData,
 } from '../services/photoService';
 import { detectSceneWithConfidence } from '../services/sceneDetector';
@@ -64,12 +65,18 @@ export default function PhotoUploader({ visible, onClose, onPhotosAdded }: Photo
       const picked = await pickPhotos();
       if (picked.length === 0) return;
 
+      // Get browser geolocation as fallback for photos without EXIF GPS
+      const fallbackLocation = await getCurrentLocation();
+
       const pending: PendingPhoto[] = picked.map((p) => {
+        const exifLocation = extractLocation(p.exif);
+        const location = exifLocation || fallbackLocation;
         const detection = detectSceneWithConfidence(p);
         return {
           picked: p,
           detectedScene: detection.scene,
-          detectedLocation: extractLocation(p.exif),
+          detectedLocation: exifLocation,
+          manualLocation: exifLocation ? undefined : (fallbackLocation || undefined),
           selectedScene: detection.scene,
         };
       });
@@ -87,11 +94,14 @@ export default function PhotoUploader({ visible, onClose, onPhotosAdded }: Photo
       const picked = await takePhoto();
       if (!picked) return;
 
+      const exifLocation = extractLocation(picked.exif);
+      const fallbackLocation = exifLocation ? null : await getCurrentLocation();
       const detection = detectSceneWithConfidence(picked);
       const pending: PendingPhoto = {
         picked,
         detectedScene: detection.scene,
-        detectedLocation: extractLocation(picked.exif),
+        detectedLocation: exifLocation,
+        manualLocation: exifLocation ? undefined : (fallbackLocation || undefined),
         selectedScene: detection.scene,
       };
 
@@ -288,12 +298,12 @@ export default function PhotoUploader({ visible, onClose, onPhotosAdded }: Photo
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>&#x1F4CD; 位置信息</Text>
                   <Text style={styles.infoValue}>
-                    {currentPhoto.detectedLocation
-                      ? `${currentPhoto.detectedLocation.latitude.toFixed(4)}, ${currentPhoto.detectedLocation.longitude.toFixed(4)}`
+                    {currentPhoto.detectedLocation || currentPhoto.manualLocation
+                      ? `${(currentPhoto.detectedLocation || currentPhoto.manualLocation)!.latitude.toFixed(4)}, ${(currentPhoto.detectedLocation || currentPhoto.manualLocation)!.longitude.toFixed(4)}`
                       : '未检测到'}
                   </Text>
                 </View>
-                {!currentPhoto.detectedLocation && (
+                {!currentPhoto.detectedLocation && !currentPhoto.manualLocation && (
                   <TouchableOpacity
                     style={styles.addLocationBtn}
                     onPress={() => setStep('location')}

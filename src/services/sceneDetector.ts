@@ -149,13 +149,33 @@ function detectByDimensions(width: number, height: number): SceneDetectionResult
   return null;
 }
 
+// Convert EXIF GPS value (array/object/number) to decimal degrees
+function gpsValueToDecimal(value: any): number | null {
+  if (value == null) return null;
+  if (typeof value === 'number') return value;
+  if (Array.isArray(value)) {
+    const [d, m, s] = value;
+    return (d || 0) + (m || 0) / 60 + (s || 0) / 3600;
+  }
+  if (typeof value === 'object') {
+    const d = value.degrees ?? value[0] ?? 0;
+    const m = value.minutes ?? value[1] ?? 0;
+    const s = value.seconds ?? value[2] ?? 0;
+    return d + m / 60 + s / 3600;
+  }
+  return null;
+}
+
 // Detect by GPS coordinates against location database
 function detectByGPS(exif?: PickedPhotoData['exif']): SceneDetectionResult | null {
   if (!exif) return null;
 
-  const lat = parseFloat(exif.GPSLatitude || exif.gpsLatitude || '');
-  const lng = parseFloat(exif.GPSLongitude || exif.gpsLongitude || '');
-  if (isNaN(lat) || isNaN(lng)) return null;
+  let lat = gpsValueToDecimal(exif.GPSLatitude ?? exif.gpsLatitude);
+  let lng = gpsValueToDecimal(exif.GPSLongitude ?? exif.gpsLongitude);
+  if (lat == null || lng == null) return null;
+
+  if (exif.GPSLatitudeRef === 'S' || exif.GPSLatitudeRef === 'SOUTH') lat = -lat;
+  if (exif.GPSLongitudeRef === 'W' || exif.GPSLongitudeRef === 'WEST') lng = -lng;
 
   const nearest = findNearestLocation(lat, lng);
   if (!nearest) return null;
