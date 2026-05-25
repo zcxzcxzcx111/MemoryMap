@@ -23,7 +23,6 @@ export interface PickedPhotoData {
 
 // Request permissions and pick photos from gallery
 export async function pickPhotos(): Promise<PickedPhotoData[]> {
-  // On web, use native <input> to get original file with EXIF intact
   if (Platform.OS === 'web') {
     return pickPhotosWeb();
   }
@@ -53,7 +52,7 @@ export async function pickPhotos(): Promise<PickedPhotoData[]> {
 }
 
 // Web: use <input type="file"> to get original files with EXIF data
-async function pickPhotosWeb(): Promise<PickedPhotoData[]> {
+function pickPhotosWeb(): Promise<PickedPhotoData[]> {
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -65,25 +64,24 @@ async function pickPhotosWeb(): Promise<PickedPhotoData[]> {
 
       const photos: PickedPhotoData[] = [];
       for (const file of files) {
-        // Read as ArrayBuffer for EXIF parsing
         const buffer = await file.arrayBuffer();
         const view = new DataView(buffer);
+
+        // Try EXIF parsing
         let exif: PickedPhotoData['exif'] = undefined;
         if (view.byteLength >= 4 && view.getUint16(0) === 0xFFD8) {
           exif = parseExifFromBuffer(view);
         }
 
-        // Read as data URI
+        // Convert to data URI
         const uri = await new Promise<string>((res) => {
           const reader = new FileReader();
           reader.onloadend = () => res(reader.result as string);
           reader.readAsDataURL(file);
         });
 
-        // Get image dimensions
         const dims = await getImageDimensions(uri);
-
-        console.log('[EXIF] File:', file.name, 'EXIF:', exif ? JSON.stringify(exif) : 'none');
+        console.log('[EXIF]', file.name, exif?.GPSLatitude ? 'GPS found' : 'no GPS');
         photos.push({ uri, width: dims.w, height: dims.h, exif });
       }
       resolve(photos);
@@ -99,208 +97,6 @@ function getImageDimensions(uri: string): Promise<{ w: number; h: number }> {
     img.onerror = () => resolve({ w: 0, h: 0 });
     img.src = uri;
   });
-}
-
-// On web: convert blob URL to data URI + extract EXIF in a single read
-async function webProcessImage(uri: string): Promise<{ dataUri: string; exifData?: PickedPhotoData['exif'] }> {
-  try {
-    const response = await fetch(uri);
-    const blob = await response.blob();
-    const buffer = await blob.arrayBuffer();
-    const view = new DataView(buffer);
-
-    // Parse EXIF from the binary data
-    let exifData: PickedPhotoData['exif'] = undefined;
-    if (view.byteLength >= 4 && view.getUint16(0) === 0xFFD8) {
-      exifData = parseExifFromBuffer(view);
-      console.log('[EXIF] Parsed:', exifData ? JSON.stringify(exifData) : 'no GPS found');
-    }
-
-    // Convert to data URI
-    const dataUri = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-
-    return { dataUri, exifData };
-  } catch (e) {
-    console.log('[EXIF] Error:', e);
-    return { dataUri: uri };
-  }
-}
-
-// Read EXIF from a web image by parsing binary JPEG data
-async function readExifFromWeb(uri: string): Promise<PickedPhotoData['exif']> {
-  try {
-    const response = await fetch(uri);
-    const buffer = await response.arrayBuffer();
-    const view = new DataView(buffer);
-
-    if (view.byteLength < 4 || view.getUint16(0) !== 0xFFD8) return undefined;
-    return parseExifFromBuffer(view);
-  } catch { return undefined; }
-}
-
-function parseExifFromBuffer(view: DataView): PickedPhotoData['exif'] {
-  try {
-
-    let offset = 2;
-    while (offset < view.byteLength - 4) {
-      if (view.getUint8(offset) !== 0xFF) break;
-      const marker = view.getUint8(offset + 1);
-
-      if (marker === 0xE1) {
-        // APP1 - EXIF
-        console.log('[EXIF] Found APP1 at offset', offset);
-        const result = parseExifSegment(view, offset);
-        console.log('[EXIF] Parse result:', JSON.stringify(result));
-        return result;
-      }
-
-      if (marker === 0xDA) break; // SOS - image data starts
-      if (marker < 0xD0 || marker > 0xD8) {
-        const segLen = view.getUint16(offset + 2);
-        offset += 2 + segLen;
-      } else {
-        offset += 2;
-      }
-    }
-  } catch {}
-  return undefined;
-}
-
-function parseExifSegment(view: DataView, offset: number): PickedPhotoData['exif'] | undefined {
-  try {
-    const segLen = view.getUint16(offset + 2);
-    const segEnd = offset + 2 + segLen;
-    let pos = offset + 4;
-
-    // Check "Exif\0\0" header
-    const header = String.fromCharCode(view.getUint8(pos), view.getUint8(pos + 1), view.getUint8(pos + 2), view.getUint8(pos + 3));
-    if (header !== 'Exif') {
-      console.log('[EXIF] No Exif header, got:', JSON.stringify(header));
-      return undefined;
-    }
-    pos += 6;
-
-    // TIFF header: byte order
-    const le = view.getUint16(pos) === 0x4949;
-    console.log('[EXIF] Little endian:', le);
-    pos += 8;
-
-    const result: any = {};
-    readIFD(view, pos, le, segEnd, result, false);
-
-    console.log('[EXIF] IFD0 result:', JSON.stringify(result));
-
-    // Read GPS IFD if pointer was found
-    if (result._gpsOffset) {
-      console.log('[EXIF] GPS IFD at offset:', result._gpsOffset);
-      const gps: any = {};
-      readIFD(view, result._gpsOffset, le, segEnd, gps, true);
-      console.log('[EXIF] GPS raw:', JSON.stringify(gps));
-      if (gps._lat && gps._lng) {
-        result.GPSLatitude = gps._lat;
-        result.GPSLongitude = gps._lng;
-        result.GPSLatitudeRef = gps._latRef || 'N';
-        result.GPSLongitudeRef = gps._lngRef || 'E';
-      }
-      delete result._gpsOffset;
-    } else {
-      console.log('[EXIF] No GPS IFD pointer found');
-    }
-
-    return Object.keys(result).length > 0 ? result : undefined;
-  } catch (e) {
-    console.log('[EXIF] Parse error:', e);
-    return undefined;
-  }
-}
-
-function readIFD(view: DataView, ifdPos: number, le: boolean, segEnd: number, result: any, isGps: boolean) {
-  if (ifdPos + 2 > segEnd) {
-    console.log('[EXIF] IFD out of bounds');
-    return;
-  }
-  const count = view.getUint16(ifdPos, le);
-
-  for (let i = 0; i < count && ifdPos + 2 + (i + 1) * 12 <= segEnd; i++) {
-    const entry = ifdPos + 2 + i * 12;
-    const tag = view.getUint16(entry, le);
-    const type = view.getUint16(entry + 2, le);
-    const tagCount = view.getUint32(entry + 4, le);
-
-    if (!isGps) {
-      // Main IFD
-      if (tag === 0x8825) {
-        // GPS IFD pointer
-        result._gpsOffset = view.getUint32(entry + 8, le);
-      } else if (tag === 0x9003) {
-        // DateTimeOriginal
-        result.DateTimeOriginal = readAscii(view, entry + 8, tagCount, segEnd);
-      } else if (tag === 0x0132) {
-        // DateTime
-        result.DateTime = readAscii(view, entry + 8, tagCount, segEnd);
-      }
-    } else {
-      // GPS IFD
-      if (tag === 1) {
-        // GPSLatitudeRef
-        result._latRef = String.fromCharCode(view.getUint8(entry + 8));
-      } else if (tag === 2) {
-        // GPSLatitude (3 Rationals)
-        result._lat = readRationals(view, entry, le, segEnd);
-      } else if (tag === 3) {
-        // GPSLongitudeRef
-        result._lngRef = String.fromCharCode(view.getUint8(entry + 8));
-      } else if (tag === 4) {
-        // GPSLongitude (3 Rationals)
-        result._lng = readRationals(view, entry, le, segEnd);
-      }
-    }
-  }
-}
-
-function readRationals(view: DataView, entry: number, le: boolean, segEnd: number): number[] | undefined {
-  const type = view.getUint16(entry + 2, le);
-  const tagCount = view.getUint32(entry + 4, le);
-  if (tagCount !== 3) return undefined;
-
-  // Rational = 8 bytes, so 3 rationals = 24 bytes
-  // If value fits in 4 bytes, it's inline; otherwise it's an offset
-  let dataOffset: number;
-  if (type === 5 && tagCount * 8 <= 4) {
-    dataOffset = entry + 8;
-  } else {
-    dataOffset = view.getUint32(entry + 8, le);
-    if (dataOffset + 24 > segEnd) return undefined;
-  }
-
-  const result: number[] = [];
-  for (let i = 0; i < 3; i++) {
-    const num = view.getUint32(dataOffset + i * 8, le);
-    const den = view.getUint32(dataOffset + i * 8 + 4, le);
-    result.push(den ? num / den : 0);
-  }
-  return result;
-}
-
-function readAscii(view: DataView, valuePos: number, count: number, segEnd: number): string | undefined {
-  // If count <= 4, value is inline; otherwise it's an offset
-  let strPos: number;
-  if (count <= 4) {
-    strPos = valuePos;
-  } else {
-    strPos = view.getUint32(valuePos, true);
-  }
-  if (strPos + count > segEnd) return undefined;
-  let str = '';
-  for (let i = 0; i < count - 1; i++) {
-    str += String.fromCharCode(view.getUint8(strPos + i));
-  }
-  return str;
 }
 
 // Take a photo with camera
@@ -320,20 +116,8 @@ export async function takePhoto(): Promise<PickedPhotoData | null> {
   }
 
   const asset = result.assets[0];
-  let uri = asset.uri;
-  if (Platform.OS === 'web') {
-    try {
-      const resp = await fetch(asset.uri);
-      const blob = await resp.blob();
-      uri = await new Promise<string>((resolve) => {
-        const r = new FileReader();
-        r.onloadend = () => resolve(r.result as string);
-        r.readAsDataURL(blob);
-      });
-    } catch {}
-  }
   return {
-    uri,
+    uri: asset.uri,
     width: asset.width,
     height: asset.height,
     exif: asset.exif || undefined,
@@ -341,27 +125,19 @@ export async function takePhoto(): Promise<PickedPhotoData | null> {
 }
 
 // Convert EXIF GPS value to decimal degrees
-// EXIF GPS can be: number, [deg, min, sec], or { degrees, minutes, seconds }
 function gpsToDecimal(value: any): number | null {
   if (value == null) return null;
-
-  // Already a number
   if (typeof value === 'number') return value;
-
-  // Array format: [degrees, minutes, seconds]
   if (Array.isArray(value)) {
     const [d, m, s] = value;
     return (d || 0) + (m || 0) / 60 + (s || 0) / 3600;
   }
-
-  // Object format: { degrees, minutes, seconds }
   if (typeof value === 'object') {
     const d = value.degrees ?? value[0] ?? 0;
     const m = value.minutes ?? value[1] ?? 0;
     const s = value.seconds ?? value[2] ?? 0;
     return d + m / 60 + s / 3600;
   }
-
   return null;
 }
 
@@ -374,21 +150,35 @@ export function extractLocation(exif?: PickedPhotoData['exif']): PhotoLocation |
 
   if (lat == null || lng == null) return null;
 
-  // Apply hemisphere reference
   let finalLat = lat;
   let finalLng = lng;
   if (exif.GPSLatitudeRef === 'S' || exif.GPSLatitudeRef === 'SOUTH') finalLat = -finalLat;
   if (exif.GPSLongitudeRef === 'W' || exif.GPSLongitudeRef === 'WEST') finalLng = -finalLng;
 
-  // Validate coordinates
   if (isNaN(finalLat) || isNaN(finalLng) || finalLat < -90 || finalLat > 90 || finalLng < -180 || finalLng > 180) {
     return null;
   }
 
-  return {
-    latitude: finalLat,
-    longitude: finalLng,
-  };
+  return { latitude: finalLat, longitude: finalLng };
+}
+
+// Get current location using browser Geolocation API
+export async function getCurrentLocation(): Promise<PhotoLocation | null> {
+  if (typeof navigator === 'undefined' || !navigator.geolocation) return null;
+
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        console.log('[GPS] Browser geolocation:', pos.coords.latitude, pos.coords.longitude);
+        resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+      },
+      (err) => {
+        console.log('[GPS] Geolocation denied:', err.message);
+        resolve(null);
+      },
+      { enableHighAccuracy: true, timeout: 5000 }
+    );
+  });
 }
 
 // Extract date from EXIF
@@ -398,7 +188,6 @@ export function extractDate(exif?: PickedPhotoData['exif']): string {
   const dateStr = exif.DateTimeOriginal || exif.DateTime;
   if (!dateStr) return new Date().toISOString().split('T')[0];
 
-  // Parse EXIF date format: "2025:05:10 14:30:00"
   const parts = dateStr.split(/[: ]/);
   if (parts.length >= 3) {
     const year = parts[0];
@@ -410,7 +199,6 @@ export function extractDate(exif?: PickedPhotoData['exif']): string {
   return new Date().toISOString().split('T')[0];
 }
 
-// Generate a unique ID
 function generateId(): string {
   return `photo-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 }
@@ -421,17 +209,24 @@ export async function processPickedPhoto(
   manualLocation?: PhotoLocation,
   manualScene?: SceneType
 ): Promise<Photo> {
-  const location = manualLocation || extractLocation(picked.exif) || {
-    latitude: 39.9042, // Default to Beijing if no location
-    longitude: 116.4074,
-  };
+  // Priority: manualLocation > EXIF GPS > browser geolocation > Beijing default
+  let location: PhotoLocation;
+
+  if (manualLocation) {
+    location = manualLocation;
+  } else {
+    const exifLocation = extractLocation(picked.exif);
+    if (exifLocation) {
+      location = exifLocation;
+    } else {
+      // Try browser geolocation as fallback
+      const geoLocation = await getCurrentLocation();
+      location = geoLocation || { latitude: 39.9042, longitude: 116.4074 };
+    }
+  }
 
   const date = extractDate(picked.exif);
-
-  // Try to reverse geocode for place name first
   const placeName = await reverseGeocode(location.latitude, location.longitude);
-
-  // Enhanced scene detection with GPS and place name
   const detection = detectSceneWithConfidence(picked, placeName);
   const scene = manualScene || detection.scene;
 
@@ -460,7 +255,6 @@ async function reverseGeocode(lat: number, lng: number): Promise<string | undefi
   }
 }
 
-// Generate a description based on scene and location
 function generateDescription(scene: SceneType, placeName?: string): string {
   const sceneDesc: Record<SceneType, string> = {
     rowing: '在划船',
@@ -488,4 +282,127 @@ function generateDescription(scene: SceneType, placeName?: string): string {
     return `${placeName} ${sceneDesc[scene]}`;
   }
   return sceneDesc[scene];
+}
+
+// ==================== EXIF Binary Parser ====================
+
+function parseExifFromBuffer(view: DataView): PickedPhotoData['exif'] | undefined {
+  try {
+    let offset = 2;
+    while (offset < view.byteLength - 4) {
+      if (view.getUint8(offset) !== 0xFF) break;
+      const marker = view.getUint8(offset + 1);
+
+      if (marker === 0xE1) {
+        return parseExifSegment(view, offset);
+      }
+
+      if (marker === 0xDA) break;
+      if (marker >= 0xD0 && marker <= 0xD8) {
+        offset += 2;
+      } else {
+        if (offset + 4 > view.byteLength) break;
+        const segLen = view.getUint16(offset + 2);
+        if (segLen < 2) break;
+        offset += 2 + segLen;
+      }
+    }
+  } catch {}
+  return undefined;
+}
+
+function parseExifSegment(view: DataView, offset: number): PickedPhotoData['exif'] | undefined {
+  try {
+    const segLen = view.getUint16(offset + 2);
+    const segEnd = offset + 2 + segLen;
+    let pos = offset + 4;
+
+    const header = String.fromCharCode(view.getUint8(pos), view.getUint8(pos + 1), view.getUint8(pos + 2), view.getUint8(pos + 3));
+    if (header !== 'Exif') return undefined;
+    pos += 6;
+
+    const le = view.getUint16(pos) === 0x4949;
+    pos += 8;
+
+    const result: any = {};
+    readIFD(view, pos, le, segEnd, result, false);
+
+    if (result._gpsOffset) {
+      const gps: any = {};
+      readIFD(view, result._gpsOffset, le, segEnd, gps, true);
+      if (gps._lat && gps._lng) {
+        result.GPSLatitude = gps._lat;
+        result.GPSLongitude = gps._lng;
+        result.GPSLatitudeRef = gps._latRef || 'N';
+        result.GPSLongitudeRef = gps._lngRef || 'E';
+      }
+      delete result._gpsOffset;
+    }
+
+    return Object.keys(result).length > 0 ? result : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function readIFD(view: DataView, ifdPos: number, le: boolean, segEnd: number, result: any, isGps: boolean) {
+  if (ifdPos + 2 > segEnd) return;
+  const count = view.getUint16(ifdPos, le);
+
+  for (let i = 0; i < count && ifdPos + 2 + (i + 1) * 12 <= segEnd; i++) {
+    const entry = ifdPos + 2 + i * 12;
+    const tag = view.getUint16(entry, le);
+    const tagCount = view.getUint32(entry + 4, le);
+
+    if (!isGps) {
+      if (tag === 0x8825) {
+        result._gpsOffset = view.getUint32(entry + 8, le);
+      } else if (tag === 0x9003) {
+        result.DateTimeOriginal = readAscii(view, entry + 8, tagCount, segEnd);
+      } else if (tag === 0x0132) {
+        result.DateTime = readAscii(view, entry + 8, tagCount, segEnd);
+      }
+    } else {
+      if (tag === 1) {
+        result._latRef = String.fromCharCode(view.getUint8(entry + 8));
+      } else if (tag === 2) {
+        result._lat = readRationals(view, entry, le, segEnd);
+      } else if (tag === 3) {
+        result._lngRef = String.fromCharCode(view.getUint8(entry + 8));
+      } else if (tag === 4) {
+        result._lng = readRationals(view, entry, le, segEnd);
+      }
+    }
+  }
+}
+
+function readRationals(view: DataView, entry: number, le: boolean, segEnd: number): number[] | undefined {
+  const tagCount = view.getUint32(entry + 4, le);
+  if (tagCount !== 3) return undefined;
+
+  let dataOffset = view.getUint32(entry + 8, le);
+  if (dataOffset + 24 > segEnd) return undefined;
+
+  const result: number[] = [];
+  for (let i = 0; i < 3; i++) {
+    const num = view.getUint32(dataOffset + i * 8, le);
+    const den = view.getUint32(dataOffset + i * 8 + 4, le);
+    result.push(den ? num / den : 0);
+  }
+  return result;
+}
+
+function readAscii(view: DataView, valuePos: number, count: number, segEnd: number): string | undefined {
+  let strPos: number;
+  if (count <= 4) {
+    strPos = valuePos;
+  } else {
+    strPos = view.getUint32(valuePos, true);
+  }
+  if (strPos + count > segEnd) return undefined;
+  let str = '';
+  for (let i = 0; i < count - 1; i++) {
+    str += String.fromCharCode(view.getUint8(strPos + i));
+  }
+  return str;
 }
