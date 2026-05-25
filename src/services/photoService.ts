@@ -45,9 +45,15 @@ export async function pickPhotos(): Promise<PickedPhotoData[]> {
   for (const asset of result.assets) {
     let exif = asset.exif || undefined;
 
-    // On web, expo-image-picker doesn't read EXIF. Use exif-js.
+    console.log('[EXIF] Platform:', Platform.OS);
+    console.log('[EXIF] asset.exif:', JSON.stringify(asset.exif));
+    console.log('[EXIF] asset.uri:', asset.uri?.substring(0, 80));
+
+    // On web, expo-image-picker doesn't read EXIF. Parse binary JPEG.
     if (Platform.OS === 'web' && !exif) {
+      console.log('[EXIF] Trying binary parse...');
       exif = await readExifFromWeb(asset.uri);
+      console.log('[EXIF] Binary parse result:', JSON.stringify(exif));
     }
 
     photos.push({
@@ -68,8 +74,13 @@ async function readExifFromWeb(uri: string): Promise<PickedPhotoData['exif']> {
     const buffer = await response.arrayBuffer();
     const view = new DataView(buffer);
 
+    console.log('[EXIF] File size:', buffer.byteLength, 'First bytes:', view.getUint16(0).toString(16));
+
     // Check JPEG SOI marker
-    if (view.byteLength < 4 || view.getUint16(0) !== 0xFFD8) return undefined;
+    if (view.byteLength < 4 || view.getUint16(0) !== 0xFFD8) {
+      console.log('[EXIF] Not a JPEG file');
+      return undefined;
+    }
 
     let offset = 2;
     while (offset < view.byteLength - 4) {
@@ -78,7 +89,10 @@ async function readExifFromWeb(uri: string): Promise<PickedPhotoData['exif']> {
 
       if (marker === 0xE1) {
         // APP1 - EXIF
-        return parseExifSegment(view, offset);
+        console.log('[EXIF] Found APP1 at offset', offset);
+        const result = parseExifSegment(view, offset);
+        console.log('[EXIF] Parse result:', JSON.stringify(result));
+        return result;
       }
 
       if (marker === 0xDA) break; // SOS - image data starts
@@ -101,20 +115,28 @@ function parseExifSegment(view: DataView, offset: number): PickedPhotoData['exif
 
     // Check "Exif\0\0" header
     const header = String.fromCharCode(view.getUint8(pos), view.getUint8(pos + 1), view.getUint8(pos + 2), view.getUint8(pos + 3));
-    if (header !== 'Exif') return undefined;
+    if (header !== 'Exif') {
+      console.log('[EXIF] No Exif header, got:', JSON.stringify(header));
+      return undefined;
+    }
     pos += 6;
 
     // TIFF header: byte order
     const le = view.getUint16(pos) === 0x4949;
-    pos += 8; // skip byte order (2) + 0x002A (2) + IFD0 offset (4)
+    console.log('[EXIF] Little endian:', le);
+    pos += 8;
 
     const result: any = {};
     readIFD(view, pos, le, segEnd, result, false);
 
+    console.log('[EXIF] IFD0 result:', JSON.stringify(result));
+
     // Read GPS IFD if pointer was found
     if (result._gpsOffset) {
+      console.log('[EXIF] GPS IFD at offset:', result._gpsOffset);
       const gps: any = {};
       readIFD(view, result._gpsOffset, le, segEnd, gps, true);
+      console.log('[EXIF] GPS raw:', JSON.stringify(gps));
       if (gps._lat && gps._lng) {
         result.GPSLatitude = gps._lat;
         result.GPSLongitude = gps._lng;
@@ -122,16 +144,22 @@ function parseExifSegment(view: DataView, offset: number): PickedPhotoData['exif
         result.GPSLongitudeRef = gps._lngRef || 'E';
       }
       delete result._gpsOffset;
+    } else {
+      console.log('[EXIF] No GPS IFD pointer found');
     }
 
     return Object.keys(result).length > 0 ? result : undefined;
-  } catch {
+  } catch (e) {
+    console.log('[EXIF] Parse error:', e);
     return undefined;
   }
 }
 
 function readIFD(view: DataView, ifdPos: number, le: boolean, segEnd: number, result: any, isGps: boolean) {
-  if (ifdPos + 2 > segEnd) return;
+  if (ifdPos + 2 > segEnd) {
+    console.log('[EXIF] IFD out of bounds');
+    return;
+  }
   const count = view.getUint16(ifdPos, le);
 
   for (let i = 0; i < count && ifdPos + 2 + (i + 1) * 12 <= segEnd; i++) {
