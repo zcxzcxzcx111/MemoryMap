@@ -32,7 +32,7 @@ export async function pickPhotos(): Promise<PickedPhotoData[]> {
 
   const result = await ImagePicker.launchImageLibraryAsync({
     allowsMultipleSelection: true,
-    quality: 0.8,
+    quality: Platform.OS === 'web' ? 1 : 0.8, // Web: don't re-encode (keeps EXIF)
     exif: true,
   });
 
