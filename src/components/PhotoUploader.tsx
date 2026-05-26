@@ -65,18 +65,13 @@ export default function PhotoUploader({ visible, onClose, onPhotosAdded }: Photo
       const picked = await pickPhotos();
       if (picked.length === 0) return;
 
-      // Get browser geolocation as fallback for photos without EXIF GPS
-      const fallbackLocation = await getCurrentLocation();
-
       const pending: PendingPhoto[] = picked.map((p) => {
         const exifLocation = extractLocation(p.exif);
-        const location = exifLocation || fallbackLocation;
         const detection = detectSceneWithConfidence(p);
         return {
           picked: p,
           detectedScene: detection.scene,
           detectedLocation: exifLocation,
-          manualLocation: exifLocation ? undefined : (fallbackLocation || undefined),
           selectedScene: detection.scene,
         };
       });
