@@ -67,6 +67,8 @@ export default function App() {
           latestPhoto={latestPhoto}
           onSceneChange={handleSceneChange}
           onBannerDismiss={handleBannerDismiss}
+          onDeletePhoto={store.removePhoto}
+          onUpdatePhoto={store.updatePhoto}
         />
       ) : (
         <TimelineScreen

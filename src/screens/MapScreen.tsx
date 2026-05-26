@@ -20,6 +20,8 @@ interface MapScreenProps {
   latestPhoto?: Photo | null;
   onSceneChange?: (photoId: string, scene: SceneType) => void;
   onBannerDismiss?: () => void;
+  onDeletePhoto: (photoId: string) => void;
+  onUpdatePhoto: (photoId: string, updates: Partial<Photo>) => void;
 }
 
 export default function MapScreen({
@@ -29,6 +31,8 @@ export default function MapScreen({
   latestPhoto,
   onSceneChange,
   onBannerDismiss,
+  onDeletePhoto,
+  onUpdatePhoto,
 }: MapScreenProps) {
   const [selectedMarkerIndex, setSelectedMarkerIndex] = useState<number>(-1);
   const [detailMarker, setDetailMarker] = useState<SceneMarker | null>(null);
@@ -133,7 +137,14 @@ export default function MapScreen({
       </TouchableOpacity>
 
       <Modal visible={detailMarker !== null} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setDetailMarker(null)}>
-        {detailMarker && <PhotoDetail marker={detailMarker} onClose={() => setDetailMarker(null)} />}
+        {detailMarker && (
+          <PhotoDetail
+            marker={detailMarker}
+            onClose={() => setDetailMarker(null)}
+            onDeletePhoto={onDeletePhoto}
+            onUpdatePhoto={onUpdatePhoto}
+          />
+        )}
       </Modal>
 
       {/* Scene confirmation banner */}

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,19 +7,25 @@ import {
   Image,
   TouchableOpacity,
   Dimensions,
+  Alert,
 } from 'react-native';
-import { SceneMarker, SceneType } from '../types';
+import { SceneMarker, SceneType, Photo } from '../types';
 import { sceneEmoji, sceneName } from '../data/mockPhotos';
 import QCharacter from '../components/QCharacter';
+import SceneSelector from '../components/SceneSelector';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface PhotoDetailProps {
   marker: SceneMarker;
   onClose: () => void;
+  onDeletePhoto: (photoId: string) => void;
+  onUpdatePhoto: (photoId: string, updates: Partial<Photo>) => void;
 }
 
-export default function PhotoDetail({ marker, onClose }: PhotoDetailProps) {
+export default function PhotoDetail({ marker, onClose, onDeletePhoto, onUpdatePhoto }: PhotoDetailProps) {
+  const [editingScene, setEditingScene] = useState(false);
+
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
     const month = d.getMonth() + 1;
@@ -29,12 +35,35 @@ export default function PhotoDetail({ marker, onClose }: PhotoDetailProps) {
     return `${year}年${month}月${day}日 ${weekdays[d.getDay()]}`;
   };
 
+  const handleDeletePhoto = (photoId: string) => {
+    Alert.alert('删除照片', '确定要删除这张照片吗？此操作不可撤销。', [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '删除',
+        style: 'destructive',
+        onPress: () => {
+          onDeletePhoto(photoId);
+          if (marker.photos.length <= 1) {
+            onClose();
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleSceneSelect = (scene: SceneType) => {
+    marker.photos.forEach((photo) => {
+      onUpdatePhoto(photo.id, { scene });
+    });
+    setEditingScene(false);
+  };
+
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-          <Text style={styles.closeBtnText}>&#x2715;</Text>
+          <Text style={styles.closeBtnText}>{'✕'}</Text>
         </TouchableOpacity>
         <View style={styles.headerInfo}>
           <Text style={styles.headerDate}>{formatDate(marker.date)}</Text>
@@ -45,16 +74,31 @@ export default function PhotoDetail({ marker, onClose }: PhotoDetailProps) {
             <Text style={styles.headerAddress}>{marker.location.address}</Text>
           )}
         </View>
-        <View style={styles.headerEmoji}>
+        <TouchableOpacity
+          style={styles.headerEmoji}
+          onPress={() => setEditingScene(!editingScene)}
+          activeOpacity={0.7}
+        >
           <Text style={styles.emojiLarge}>{sceneEmoji[marker.scene]}</Text>
           <Text style={styles.sceneLabel}>{sceneName[marker.scene]}</Text>
-        </View>
+          <Text style={styles.editHint}>{'✏'}</Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView
         style={styles.content}
         showsVerticalScrollIndicator={false}
       >
+        {/* Scene Editor */}
+        {editingScene && (
+          <View style={styles.sceneEditor}>
+            <SceneSelector
+              selectedScene={marker.scene}
+              onSelect={handleSceneSelect}
+            />
+          </View>
+        )}
+
         {/* Q Character Display */}
         <View style={styles.characterSection}>
           <QCharacter
@@ -75,19 +119,26 @@ export default function PhotoDetail({ marker, onClose }: PhotoDetailProps) {
             今日照片 ({marker.photos.length})
           </Text>
           <View style={styles.photoGrid}>
-            {marker.photos.map((photo, index) => (
+            {marker.photos.map((photo) => (
               <View key={photo.id} style={styles.photoCard}>
                 <Image
                   source={{ uri: photo.uri }}
                   style={styles.photoImage}
                   resizeMode="cover"
                 />
+                <TouchableOpacity
+                  style={styles.deletePhotoBtn}
+                  onPress={() => handleDeletePhoto(photo.id)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.deletePhotoIcon}>{'\u{1F5D1}'}</Text>
+                </TouchableOpacity>
                 <View style={styles.photoOverlay}>
                   <Text style={styles.photoDesc}>{photo.description}</Text>
                 </View>
                 {photo.isDailyPick && (
                   <View style={styles.dailyPickBadge}>
-                    <Text style={styles.dailyPickText}>&#x2B50; 每日精选</Text>
+                    <Text style={styles.dailyPickText}>{'⭐'} 每日精选</Text>
                   </View>
                 )}
               </View>
@@ -97,7 +148,7 @@ export default function PhotoDetail({ marker, onClose }: PhotoDetailProps) {
 
         {/* Location Info */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>&#x1F4CD; 位置信息</Text>
+          <Text style={styles.sectionTitle}>{'\u{1F4CD}'} 位置信息</Text>
           <View style={styles.locationCard}>
             <View style={styles.locationRow}>
               <Text style={styles.locationLabel}>纬度</Text>
@@ -177,6 +228,7 @@ const styles = StyleSheet.create({
   },
   headerEmoji: {
     alignItems: 'center',
+    position: 'relative',
   },
   emojiLarge: {
     fontSize: 28,
@@ -186,8 +238,27 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 2,
   },
+  editHint: {
+    position: 'absolute',
+    top: -4,
+    right: -10,
+    fontSize: 12,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+    width: 18,
+    height: 18,
+    textAlign: 'center',
+    lineHeight: 18,
+    overflow: 'hidden',
+  },
   content: {
     flex: 1,
+  },
+  sceneEditor: {
+    backgroundColor: 'white',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    marginBottom: 12,
   },
   characterSection: {
     alignItems: 'center',
@@ -227,6 +298,20 @@ const styles = StyleSheet.create({
   photoImage: {
     width: '100%',
     height: SCREEN_WIDTH * 0.6,
+  },
+  deletePhotoBtn: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 16,
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deletePhotoIcon: {
+    fontSize: 16,
   },
   photoOverlay: {
     padding: 12,
