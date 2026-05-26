@@ -62,7 +62,9 @@ export default function PhotoUploader({ visible, onClose, onPhotosAdded }: Photo
   // Step 1: Pick photos
   const handlePickFromGallery = useCallback(async () => {
     try {
+      console.log('[PhotoUploader] Starting pick from gallery...');
       const picked = await pickPhotos();
+      console.log('[PhotoUploader] Picked photos:', picked.length);
       if (picked.length === 0) return;
 
       const pending: PendingPhoto[] = picked.map((p) => {
@@ -76,10 +78,12 @@ export default function PhotoUploader({ visible, onClose, onPhotosAdded }: Photo
         };
       });
 
+      console.log('[PhotoUploader] Setting pending photos, moving to review');
       setPendingPhotos(pending);
       setCurrentIndex(0);
       setStep('review');
     } catch (error: any) {
+      console.error('[PhotoUploader] Error:', error);
       Alert.alert('错误', error.message || '选择照片失败');
     }
   }, []);
