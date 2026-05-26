@@ -10,6 +10,7 @@ export interface PickedPhotoData {
   uri: string;
   width: number;
   height: number;
+  lastModified?: number;
   exif?: {
     GPSLatitude?: number;
     GPSLongitude?: number;
@@ -82,7 +83,7 @@ function pickPhotosWeb(): Promise<PickedPhotoData[]> {
 
         const dims = await getImageDimensions(uri);
         console.log('[EXIF]', file.name, exif?.GPSLatitude ? 'GPS found' : 'no GPS');
-        photos.push({ uri, width: dims.w, height: dims.h, exif });
+        photos.push({ uri, width: dims.w, height: dims.h, lastModified: file.lastModified, exif });
       }
       resolve(photos);
     };
@@ -181,21 +182,34 @@ export async function getCurrentLocation(): Promise<PhotoLocation | null> {
   });
 }
 
-// Extract date from EXIF
-export function extractDate(exif?: PickedPhotoData['exif']): string {
-  if (!exif) return new Date().toISOString().split('T')[0];
+// Extract date from EXIF or file metadata
+export function extractDate(picked?: PickedPhotoData): string {
+  const exif = picked?.exif;
 
-  const dateStr = exif.DateTimeOriginal || exif.DateTime;
-  if (!dateStr) return new Date().toISOString().split('T')[0];
+  // 1. Try EXIF DateTimeOriginal / DateTime
+  if (exif) {
+    const dateStr = exif.DateTimeOriginal || exif.DateTime;
+    if (dateStr) {
+      const parts = dateStr.split(/[: ]/);
+      if (parts.length >= 3) {
+        const year = parts[0];
+        const month = parts[1].padStart(2, '0');
+        const day = parts[2].padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      }
+    }
+  }
 
-  const parts = dateStr.split(/[: ]/);
-  if (parts.length >= 3) {
-    const year = parts[0];
-    const month = parts[1].padStart(2, '0');
-    const day = parts[2].padStart(2, '0');
+  // 2. Fallback: file lastModified timestamp (usually photo taken date)
+  if (picked?.lastModified) {
+    const d = new Date(picked.lastModified);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   }
 
+  // 3. Last resort: today
   return new Date().toISOString().split('T')[0];
 }
 
@@ -225,7 +239,7 @@ export async function processPickedPhoto(
     }
   }
 
-  const date = extractDate(picked.exif);
+  const date = extractDate(picked);
   const placeName = await reverseGeocode(location.latitude, location.longitude);
   const detection = detectSceneWithConfidence(picked, placeName);
   const scene = manualScene || detection.scene;

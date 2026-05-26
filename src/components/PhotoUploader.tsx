@@ -292,7 +292,7 @@ export default function PhotoUploader({ visible, onClose, onPhotosAdded }: Photo
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>&#x1F4F8; 拍摄日期</Text>
                   <Text style={styles.infoValue}>
-                    {extractDate(currentPhoto.picked.exif)}
+                    {extractDate(currentPhoto.picked)}
                   </Text>
                 </View>
                 <View style={styles.infoRow}>
