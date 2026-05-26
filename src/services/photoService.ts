@@ -343,15 +343,16 @@ function parseExifSegment(view: DataView, offset: number): PickedPhotoData['exif
     if (header !== 'Exif') return undefined;
     pos += 6;
 
+    const tiffBase = pos; // TIFF header start, all IFD offsets are relative to this
     const le = view.getUint16(pos) === 0x4949;
     pos += 8;
 
     const result: any = {};
-    readIFD(view, pos, le, segEnd, result, false);
+    readIFD(view, pos, le, segEnd, tiffBase, result, false);
 
     if (result._gpsOffset) {
       const gps: any = {};
-      readIFD(view, result._gpsOffset, le, segEnd, gps, true);
+      readIFD(view, tiffBase + result._gpsOffset, le, segEnd, tiffBase, gps, true);
       if (gps._lat && gps._lng) {
         result.GPSLatitude = gps._lat;
         result.GPSLongitude = gps._lng;
@@ -367,7 +368,7 @@ function parseExifSegment(view: DataView, offset: number): PickedPhotoData['exif
   }
 }
 
-function readIFD(view: DataView, ifdPos: number, le: boolean, segEnd: number, result: any, isGps: boolean) {
+function readIFD(view: DataView, ifdPos: number, le: boolean, segEnd: number, tiffBase: number, result: any, isGps: boolean) {
   if (ifdPos + 2 > segEnd) return;
   const count = view.getUint16(ifdPos, le);
 
@@ -380,29 +381,29 @@ function readIFD(view: DataView, ifdPos: number, le: boolean, segEnd: number, re
       if (tag === 0x8825) {
         result._gpsOffset = view.getUint32(entry + 8, le);
       } else if (tag === 0x9003) {
-        result.DateTimeOriginal = readAscii(view, entry + 8, tagCount, segEnd);
+        result.DateTimeOriginal = readAscii(view, entry + 8, tagCount, segEnd, tiffBase);
       } else if (tag === 0x0132) {
-        result.DateTime = readAscii(view, entry + 8, tagCount, segEnd);
+        result.DateTime = readAscii(view, entry + 8, tagCount, segEnd, tiffBase);
       }
     } else {
       if (tag === 1) {
         result._latRef = String.fromCharCode(view.getUint8(entry + 8));
       } else if (tag === 2) {
-        result._lat = readRationals(view, entry, le, segEnd);
+        result._lat = readRationals(view, entry, le, segEnd, tiffBase);
       } else if (tag === 3) {
         result._lngRef = String.fromCharCode(view.getUint8(entry + 8));
       } else if (tag === 4) {
-        result._lng = readRationals(view, entry, le, segEnd);
+        result._lng = readRationals(view, entry, le, segEnd, tiffBase);
       }
     }
   }
 }
 
-function readRationals(view: DataView, entry: number, le: boolean, segEnd: number): number[] | undefined {
+function readRationals(view: DataView, entry: number, le: boolean, segEnd: number, tiffBase: number): number[] | undefined {
   const tagCount = view.getUint32(entry + 4, le);
   if (tagCount !== 3) return undefined;
 
-  let dataOffset = view.getUint32(entry + 8, le);
+  let dataOffset = tiffBase + view.getUint32(entry + 8, le);
   if (dataOffset + 24 > segEnd) return undefined;
 
   const result: number[] = [];
@@ -414,12 +415,12 @@ function readRationals(view: DataView, entry: number, le: boolean, segEnd: numbe
   return result;
 }
 
-function readAscii(view: DataView, valuePos: number, count: number, segEnd: number): string | undefined {
+function readAscii(view: DataView, valuePos: number, count: number, segEnd: number, tiffBase: number): string | undefined {
   let strPos: number;
   if (count <= 4) {
     strPos = valuePos;
   } else {
-    strPos = view.getUint32(valuePos, true);
+    strPos = tiffBase + view.getUint32(valuePos, true);
   }
   if (strPos + count > segEnd) return undefined;
   let str = '';
