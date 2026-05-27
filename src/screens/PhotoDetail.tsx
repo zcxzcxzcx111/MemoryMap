@@ -111,6 +111,15 @@ export default function PhotoDetail({ marker, onClose, onDeletePhoto, onUpdatePh
           <Text style={styles.characterCaption}>
             {marker.description}
           </Text>
+          <TouchableOpacity
+            style={styles.changeSceneBtn}
+            onPress={() => setEditingScene(!editingScene)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.changeSceneBtnText}>
+              {editingScene ? '收起' : '\u{1F504} 切换形象'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Photos Grid */}
@@ -271,6 +280,18 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#2C3E50',
     marginTop: 12,
+  },
+  changeSceneBtn: {
+    marginTop: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 20,
+  },
+  changeSceneBtnText: {
+    fontSize: 14,
+    color: '#4ECDC4',
+    fontWeight: '600',
   },
   section: {
     paddingHorizontal: 16,
