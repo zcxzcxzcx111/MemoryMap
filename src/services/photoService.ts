@@ -52,38 +52,29 @@ export async function pickPhotos(): Promise<PickedPhotoData[]> {
   }));
 }
 
-// Web: use a persistent <input type="file"> to reliably trigger file picker
-let fileInput: HTMLInputElement | null = null;
-let fileInputCallback: ((files: FileList) => void) | null = null;
-
-function getOrCreateFileInput(): HTMLInputElement {
-  if (!fileInput) {
-    fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.accept = 'image/*';
-    fileInput.multiple = true;
-    fileInput.style.display = 'none';
-    fileInput.addEventListener('change', () => {
-      if (fileInputCallback && fileInput.files && fileInput.files.length > 0) {
-        const cb = fileInputCallback;
-        const files = fileInput.files;
-        fileInputCallback = null;
-        fileInput.value = '';
-        cb(files);
-      }
-    });
-    document.body.appendChild(fileInput);
-  }
-  return fileInput;
-}
-
+// Web: use <input type="file"> placed in DOM for reliable triggering
 function pickPhotosWeb(): Promise<PickedPhotoData[]> {
   return new Promise((resolve, reject) => {
-    const input = getOrCreateFileInput();
-    fileInputCallback = async (fileList: FileList) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.multiple = true;
+    // Position off-screen but in DOM (some browsers ignore display:none)
+    input.style.position = 'fixed';
+    input.style.top = '0';
+    input.style.left = '0';
+    input.style.opacity = '0.01';
+    input.style.width = '1px';
+    input.style.height = '1px';
+
+    input.onchange = async () => {
+      // Clean up input from DOM
+      if (input.parentNode) input.parentNode.removeChild(input);
+
       try {
-        const files = Array.from(fileList);
+        const files = Array.from(input.files || []);
         console.log('[pickPhotosWeb] Files selected:', files.length);
+        if (files.length === 0) { resolve([]); return; }
 
         const photos: PickedPhotoData[] = [];
         for (const file of files) {
@@ -112,8 +103,14 @@ function pickPhotosWeb(): Promise<PickedPhotoData[]> {
         reject(err);
       }
     };
-    console.log('[pickPhotosWeb] Opening file picker...');
-    input.click();
+
+    // Add to DOM before clicking
+    document.body.appendChild(input);
+    console.log('[pickPhotosWeb] Input added to DOM, clicking...');
+    // Use setTimeout to ensure DOM has updated
+    setTimeout(() => {
+      input.click();
+    }, 50);
   });
 }
 
