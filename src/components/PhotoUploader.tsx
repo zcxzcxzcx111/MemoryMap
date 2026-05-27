@@ -19,6 +19,7 @@ import {
   extractLocation,
   extractDate,
   getCurrentLocation,
+  parseExifFromBuffer,
   PickedPhotoData,
 } from '../services/photoService';
 import { detectSceneWithConfidence } from '../services/sceneDetector';
@@ -59,12 +60,77 @@ export default function PhotoUploader({ visible, onClose, onPhotosAdded }: Photo
     onClose();
   }, [reset, onClose]);
 
-  // Step 1: Pick photos
+  // Step 1: Pick photos - on web, create input synchronously to preserve user gesture
   const handlePickFromGallery = useCallback(async () => {
+    if (Platform.OS === 'web') {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.multiple = true;
+      input.style.position = 'fixed';
+      input.style.left = '-9999px';
+
+      input.addEventListener('change', async () => {
+        const files = Array.from(input.files || []);
+        if (input.parentNode) input.parentNode.removeChild(input);
+        console.log('[PhotoUploader] Files selected:', files.length);
+        if (files.length === 0) return;
+
+        try {
+          // Process files inline (same as pickPhotosWeb)
+          const photos: PickedPhotoData[] = [];
+          for (const file of files) {
+            const buffer = await file.arrayBuffer();
+            const view = new DataView(buffer);
+            let exif: any = undefined;
+            if (view.byteLength >= 4 && view.getUint16(0) === 0xFFD8) {
+              exif = parseExifFromBuffer(view);
+            }
+            const uri = await new Promise<string>((res) => {
+              const reader = new FileReader();
+              reader.onloadend = () => res(reader.result as string);
+              reader.readAsDataURL(file);
+            });
+            const img = new Image();
+            const dims = await new Promise<{ w: number; h: number }>((res) => {
+              img.onload = () => res({ w: img.naturalWidth, h: img.naturalHeight });
+              img.onerror = () => res({ w: 0, h: 0 });
+              img.src = uri;
+            });
+            photos.push({ uri, width: dims.w, height: dims.h, lastModified: file.lastModified, exif });
+          }
+
+          console.log('[PhotoUploader] Processing', photos.length, 'photos');
+          if (photos.length === 0) return;
+
+          const pending: PendingPhoto[] = photos.map((p) => {
+            const exifLocation = extractLocation(p.exif);
+            const detection = detectSceneWithConfidence(p);
+            return {
+              picked: p,
+              detectedScene: detection.scene,
+              detectedLocation: exifLocation,
+              selectedScene: detection.scene,
+            };
+          });
+
+          console.log('[PhotoUploader] Moving to review');
+          setPendingPhotos(pending);
+          setCurrentIndex(0);
+          setStep('review');
+        } catch (err: any) {
+          console.error('[PhotoUploader] Process error:', err);
+        }
+      });
+
+      document.body.appendChild(input);
+      input.click();
+      return;
+    }
+
+    // Native path
     try {
-      console.log('[PhotoUploader] Starting pick from gallery...');
       const picked = await pickPhotos();
-      console.log('[PhotoUploader] Picked photos:', picked.length);
       if (picked.length === 0) return;
 
       const pending: PendingPhoto[] = picked.map((p) => {
@@ -78,12 +144,10 @@ export default function PhotoUploader({ visible, onClose, onPhotosAdded }: Photo
         };
       });
 
-      console.log('[PhotoUploader] Setting pending photos, moving to review');
       setPendingPhotos(pending);
       setCurrentIndex(0);
       setStep('review');
     } catch (error: any) {
-      console.error('[PhotoUploader] Error:', error);
       Alert.alert('错误', error.message || '选择照片失败');
     }
   }, []);

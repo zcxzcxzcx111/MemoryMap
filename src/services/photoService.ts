@@ -310,7 +310,7 @@ function generateDescription(scene: SceneType, placeName?: string): string {
 
 // ==================== EXIF Binary Parser ====================
 
-function parseExifFromBuffer(view: DataView): PickedPhotoData['exif'] | undefined {
+export function parseExifFromBuffer(view: DataView): PickedPhotoData['exif'] | undefined {
   try {
     let offset = 2;
     while (offset < view.byteLength - 4) {
