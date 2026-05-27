@@ -59,21 +59,12 @@ function pickPhotosWeb(): Promise<PickedPhotoData[]> {
     input.type = 'file';
     input.accept = 'image/*';
     input.multiple = true;
-    // Position off-screen but in DOM (some browsers ignore display:none)
-    input.style.position = 'fixed';
-    input.style.top = '0';
-    input.style.left = '0';
-    input.style.opacity = '0.01';
-    input.style.width = '1px';
-    input.style.height = '1px';
 
-    input.onchange = async () => {
-      // Clean up input from DOM
-      if (input.parentNode) input.parentNode.removeChild(input);
-
+    input.addEventListener('change', async () => {
       try {
         const files = Array.from(input.files || []);
         console.log('[pickPhotosWeb] Files selected:', files.length);
+        if (input.parentNode) input.parentNode.removeChild(input);
         if (files.length === 0) { resolve([]); return; }
 
         const photos: PickedPhotoData[] = [];
@@ -99,18 +90,14 @@ function pickPhotosWeb(): Promise<PickedPhotoData[]> {
         }
         resolve(photos);
       } catch (err) {
-        console.error('[pickPhotosWeb] Error processing files:', err);
+        console.error('[pickPhotosWeb] Error:', err);
         reject(err);
       }
-    };
+    });
 
-    // Add to DOM before clicking
     document.body.appendChild(input);
-    console.log('[pickPhotosWeb] Input added to DOM, clicking...');
-    // Use setTimeout to ensure DOM has updated
-    setTimeout(() => {
-      input.click();
-    }, 50);
+    console.log('[pickPhotosWeb] Clicking input...');
+    input.click();
   });
 }
 
