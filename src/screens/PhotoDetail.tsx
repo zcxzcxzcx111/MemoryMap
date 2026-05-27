@@ -111,13 +111,17 @@ export default function PhotoDetail({ marker, onClose, onDeletePhoto, onUpdatePh
           <Text style={styles.characterCaption}>
             {marker.description}
           </Text>
+        </View>
+
+        {/* Change Scene Button - always visible, outside QCharacter section */}
+        <View style={styles.changeSceneSection}>
           <TouchableOpacity
             style={styles.changeSceneBtn}
             onPress={() => setEditingScene(!editingScene)}
             activeOpacity={0.7}
           >
             <Text style={styles.changeSceneBtnText}>
-              {editingScene ? '收起' : '\u{1F504} 切换形象'}
+              {editingScene ? '收起选择器' : '\u{1F504} 切换形象'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -281,16 +285,26 @@ const styles = StyleSheet.create({
     color: '#2C3E50',
     marginTop: 12,
   },
+  changeSceneSection: {
+    alignItems: 'center',
+    paddingVertical: 12,
+    backgroundColor: 'white',
+    marginBottom: 12,
+  },
   changeSceneBtn: {
-    marginTop: 14,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: '#4ECDC4',
+    borderRadius: 24,
+    shadowColor: '#4ECDC4',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   changeSceneBtnText: {
-    fontSize: 14,
-    color: '#4ECDC4',
+    fontSize: 15,
+    color: 'white',
     fontWeight: '600',
   },
   section: {

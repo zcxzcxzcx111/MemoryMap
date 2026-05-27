@@ -52,18 +52,38 @@ export async function pickPhotos(): Promise<PickedPhotoData[]> {
   }));
 }
 
-// Web: use <input type="file"> to get original files with EXIF data
+// Web: use a persistent <input type="file"> to reliably trigger file picker
+let fileInput: HTMLInputElement | null = null;
+let fileInputCallback: ((files: FileList) => void) | null = null;
+
+function getOrCreateFileInput(): HTMLInputElement {
+  if (!fileInput) {
+    fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/*';
+    fileInput.multiple = true;
+    fileInput.style.display = 'none';
+    fileInput.addEventListener('change', () => {
+      if (fileInputCallback && fileInput.files && fileInput.files.length > 0) {
+        const cb = fileInputCallback;
+        const files = fileInput.files;
+        fileInputCallback = null;
+        fileInput.value = '';
+        cb(files);
+      }
+    });
+    document.body.appendChild(fileInput);
+  }
+  return fileInput;
+}
+
 function pickPhotosWeb(): Promise<PickedPhotoData[]> {
   return new Promise((resolve, reject) => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.multiple = true;
-    input.onchange = async () => {
+    const input = getOrCreateFileInput();
+    fileInputCallback = async (fileList: FileList) => {
       try {
-        const files = Array.from(input.files || []);
+        const files = Array.from(fileList);
         console.log('[pickPhotosWeb] Files selected:', files.length);
-        if (files.length === 0) { resolve([]); return; }
 
         const photos: PickedPhotoData[] = [];
         for (const file of files) {
@@ -71,13 +91,11 @@ function pickPhotosWeb(): Promise<PickedPhotoData[]> {
           const buffer = await file.arrayBuffer();
           const view = new DataView(buffer);
 
-          // Try EXIF parsing
           let exif: PickedPhotoData['exif'] = undefined;
           if (view.byteLength >= 4 && view.getUint16(0) === 0xFFD8) {
             exif = parseExifFromBuffer(view);
           }
 
-          // Convert to data URI
           const uri = await new Promise<string>((res) => {
             const reader = new FileReader();
             reader.onloadend = () => res(reader.result as string);
