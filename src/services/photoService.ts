@@ -52,19 +52,17 @@ export async function pickPhotos(): Promise<PickedPhotoData[]> {
   }));
 }
 
-// Web: use <input type="file"> placed in DOM for reliable triggering
+// Web: use <input type="file"> to get original files with EXIF data
 function pickPhotosWeb(): Promise<PickedPhotoData[]> {
   return new Promise((resolve, reject) => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
     input.multiple = true;
-
-    input.addEventListener('change', async () => {
+    input.onchange = async () => {
       try {
         const files = Array.from(input.files || []);
         console.log('[pickPhotosWeb] Files selected:', files.length);
-        if (input.parentNode) input.parentNode.removeChild(input);
         if (files.length === 0) { resolve([]); return; }
 
         const photos: PickedPhotoData[] = [];
@@ -73,11 +71,13 @@ function pickPhotosWeb(): Promise<PickedPhotoData[]> {
           const buffer = await file.arrayBuffer();
           const view = new DataView(buffer);
 
+          // Try EXIF parsing
           let exif: PickedPhotoData['exif'] = undefined;
           if (view.byteLength >= 4 && view.getUint16(0) === 0xFFD8) {
             exif = parseExifFromBuffer(view);
           }
 
+          // Convert to data URI
           const uri = await new Promise<string>((res) => {
             const reader = new FileReader();
             reader.onloadend = () => res(reader.result as string);
@@ -90,13 +90,11 @@ function pickPhotosWeb(): Promise<PickedPhotoData[]> {
         }
         resolve(photos);
       } catch (err) {
-        console.error('[pickPhotosWeb] Error:', err);
+        console.error('[pickPhotosWeb] Error processing files:', err);
         reject(err);
       }
-    });
-
-    document.body.appendChild(input);
-    console.log('[pickPhotosWeb] Clicking input...');
+    };
+    console.log('[pickPhotosWeb] Opening file picker...');
     input.click();
   });
 }
@@ -310,7 +308,7 @@ function generateDescription(scene: SceneType, placeName?: string): string {
 
 // ==================== EXIF Binary Parser ====================
 
-export function parseExifFromBuffer(view: DataView): PickedPhotoData['exif'] | undefined {
+function parseExifFromBuffer(view: DataView): PickedPhotoData['exif'] | undefined {
   try {
     let offset = 2;
     while (offset < view.byteLength - 4) {
