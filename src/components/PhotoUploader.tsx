@@ -216,8 +216,8 @@ export default function PhotoUploader({ visible, onClose, onPhotosAdded }: Photo
               </TouchableOpacity>
 
               <TouchableOpacity style={[styles.pickBtn, styles.pickBtnAlt]} onPress={handleTakePhoto} activeOpacity={0.7}>
-                <Text style={styles.pickBtnText}>拍照</Text>
-                <Text style={styles.pickBtnHint}>立即拍摄</Text>
+                <Text style={[styles.pickBtnText, styles.pickBtnTextAlt]}>拍照</Text>
+                <Text style={[styles.pickBtnHint, styles.pickBtnHintAlt]}>立即拍摄</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -334,8 +334,10 @@ const styles = StyleSheet.create({
     width: '100%', marginBottom: spacing.md,
   },
   pickBtnAlt: { backgroundColor: colors.background, borderWidth: 1, borderColor: colors.accent },
+  pickBtnTextAlt: { color: colors.accent },
   pickBtnText: { ...typography.headline, color: colors.textOnAccent },
   pickBtnHint: { ...typography.caption1, color: 'rgba(255,255,255,0.6)', marginLeft: spacing.sm },
+  pickBtnHintAlt: { color: colors.textTertiary },
   reviewContent: { flex: 1, paddingHorizontal: spacing.xl },
   preview: {
     width: '100%', height: 280, borderRadius: radius.lg,

@@ -38,6 +38,37 @@ export const colors = {
   mapOverlay: 'rgba(255, 255, 255, 0.9)',
 };
 
+// iOS 26 Liquid Glass effect styles
+export const liquidGlass = {
+  // For use with View style: {...liquidGlass.card}
+  card: {
+    backgroundColor: 'rgba(255, 255, 255, 0.65)',
+    // @ts-ignore — backdropFilter is web-only
+    backdropFilter: 'blur(40px) saturate(180%)',
+    WebkitBackdropFilter: 'blur(40px) saturate(180%)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+  },
+  // Lighter variant for overlays
+  light: {
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    // @ts-ignore
+    backdropFilter: 'blur(30px) saturate(150%)',
+    WebkitBackdropFilter: 'blur(30px) saturate(150%)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+  },
+  // Tab bar / bottom bar
+  bar: {
+    backgroundColor: 'rgba(255, 255, 255, 0.72)',
+    // @ts-ignore
+    backdropFilter: 'blur(50px) saturate(180%)',
+    WebkitBackdropFilter: 'blur(50px) saturate(180%)',
+    borderTopWidth: 0.5,
+    borderTopColor: 'rgba(60, 60, 67, 0.08)',
+  },
+};
+
 export const typography = {
   largeTitle: { fontSize: 34, fontWeight: '700' as const },
   title1: { fontSize: 28, fontWeight: '700' as const },

@@ -7,7 +7,7 @@ import MapScreen from './src/screens/MapScreen';
 import TimelineScreen from './src/screens/TimelineScreen';
 import PhotoUploader from './src/components/PhotoUploader';
 import { reverseGeocode } from './src/services/amapService';
-import { colors, typography } from './src/theme/appleTheme';
+import { colors, typography, liquidGlass } from './src/theme/appleTheme';
 
 type Screen = 'map' | 'timeline';
 
@@ -118,9 +118,8 @@ const styles = StyleSheet.create({
   tabBar: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     flexDirection: 'row',
-    backgroundColor: colors.frostedWhite,
+    ...liquidGlass.bar,
     paddingBottom: 28, paddingTop: 10,
-    borderTopWidth: 0.5, borderTopColor: colors.separator,
   },
   tab: {
     flex: 1, alignItems: 'center', paddingVertical: 4,

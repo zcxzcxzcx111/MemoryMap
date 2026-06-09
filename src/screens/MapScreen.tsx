@@ -12,7 +12,7 @@ import SceneWheel from '../components/SceneWheel';
 import WebMapView from '../components/WebMapView';
 import SceneConfirmBanner from '../components/SceneConfirmBanner';
 import PhotoDetail from './PhotoDetail';
-import { colors, typography, spacing, radius } from '../theme/appleTheme';
+import { colors, typography, spacing, radius, liquidGlass } from '../theme/appleTheme';
 
 interface MapScreenProps {
   photos: Photo[];
@@ -177,13 +177,14 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   mapContainer: { flex: 1, paddingTop: 120 },
 
-  // Frosted glass header
+  // Liquid glass header
   header: {
     position: 'absolute', top: 50, left: spacing.xl, right: spacing.xl,
-    backgroundColor: colors.frostedWhite, borderRadius: radius.lg,
+    ...liquidGlass.card,
+    borderRadius: radius.lg,
     paddingHorizontal: spacing.xl, paddingVertical: spacing.md,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06, shadowRadius: 8, elevation: 3, zIndex: 100,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08, shadowRadius: 16, elevation: 3, zIndex: 100,
   },
   headerTitle: { ...typography.title2, color: colors.textPrimary },
   headerSubtitle: { ...typography.caption1, color: colors.textSecondary, marginTop: 2 },
@@ -191,10 +192,11 @@ const styles = StyleSheet.create({
   // Info bar
   infoBar: {
     position: 'absolute', bottom: 100, left: spacing.xl, right: spacing.xl,
-    backgroundColor: colors.frostedWhite, borderRadius: radius.lg,
+    ...liquidGlass.card,
+    borderRadius: radius.lg,
     paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06, shadowRadius: 8, elevation: 3, zIndex: 100,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08, shadowRadius: 16, elevation: 3, zIndex: 100,
   },
   infoBarContent: { flexDirection: 'row', alignItems: 'center' },
   infoBarEmoji: { fontSize: 24, marginRight: spacing.md },
@@ -211,10 +213,11 @@ const styles = StyleSheet.create({
   // Legend
   legend: {
     position: 'absolute', bottom: 30, left: spacing.xl, right: spacing.xl,
-    backgroundColor: colors.frostedWhite, borderRadius: radius.lg,
+    ...liquidGlass.light,
+    borderRadius: radius.lg,
     paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06, shadowRadius: 8, elevation: 3, zIndex: 100,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06, shadowRadius: 16, elevation: 3, zIndex: 100,
   },
   legendItems: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
