@@ -12,6 +12,7 @@ import SceneWheel from '../components/SceneWheel';
 import WebMapView from '../components/WebMapView';
 import SceneConfirmBanner from '../components/SceneConfirmBanner';
 import PhotoDetail from './PhotoDetail';
+import { colors, typography, spacing, radius } from '../theme/appleTheme';
 
 interface MapScreenProps {
   photos: Photo[];
@@ -68,24 +69,26 @@ export default function MapScreen({
     [latestPhoto, onSceneChange]
   );
 
+  // Empty state
   if (markers.length === 0) {
     return (
       <View style={styles.emptyContainer}>
         <View style={styles.emptyHeader}>
-          <Text style={styles.headerTitle}>MemoryMap</Text>
-          <Text style={styles.headerSubtitle}>你的回忆地图</Text>
+          <Text style={styles.emptyHeaderTitle}>MemoryMap</Text>
+          <Text style={styles.emptyHeaderSub}>你的回忆地图</Text>
         </View>
         <View style={styles.emptyContent}>
-          <Text style={styles.emptyEmoji}>&#x1F5FA;</Text>
+          <View style={styles.emptyIconCircle}>
+            <Text style={styles.emptyIcon}>+</Text>
+          </View>
           <Text style={styles.emptyTitle}>还没有照片</Text>
-          <Text style={styles.emptySubtitle}>上传带有GPS信息的照片{'\n'}在地图上生成你的回忆标记</Text>
-          <TouchableOpacity style={styles.emptyBtn} onPress={onOpenUploader}>
-            <Text style={styles.emptyBtnText}>&#x1F4F7; 上传第一张照片</Text>
+          <Text style={styles.emptySubtitle}>
+            上传带有 GPS 信息的照片，在地图上生成回忆标记
+          </Text>
+          <TouchableOpacity style={styles.emptyBtn} onPress={onOpenUploader} activeOpacity={0.7}>
+            <Text style={styles.emptyBtnText}>上传第一张照片</Text>
           </TouchableOpacity>
         </View>
-        <TouchableOpacity style={styles.fab} onPress={onOpenUploader}>
-          <Text style={styles.fabIcon}>+</Text>
-        </TouchableOpacity>
       </View>
     );
   }
@@ -96,6 +99,7 @@ export default function MapScreen({
         <WebMapView markers={markers} selectedIndex={selectedMarkerIndex} onMarkerPress={handleMarkerPress} />
       </View>
 
+      {/* Frosted glass header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>MemoryMap</Text>
         <Text style={styles.headerSubtitle}>{markers.length} 个回忆地点 · {photos.length} 张照片</Text>
@@ -103,24 +107,33 @@ export default function MapScreen({
 
       <SceneWheel markers={markers} selectedIndex={selectedMarkerIndex} onSelect={handleWheelSelect} visible={showWheel} />
 
+      {/* Info bar */}
       {selectedMarker && !detailMarker && (
         <View style={styles.infoBar}>
           <View style={styles.infoBarContent}>
             <Text style={styles.infoBarEmoji}>{sceneEmoji[selectedMarker.scene]}</Text>
             <View style={styles.infoBarText}>
-              <Text style={styles.infoBarTitle}>{selectedMarker.location.placeName}</Text>
-              <Text style={styles.infoBarDesc}>{selectedMarker.description} · {selectedMarker.photos.length} 张照片</Text>
+              <Text style={styles.infoBarTitle} numberOfLines={1}>
+                {selectedMarker.location.placeName || '未知地点'}
+              </Text>
+              <Text style={styles.infoBarDesc}>
+                {selectedMarker.description} · {selectedMarker.photos.length} 张照片
+              </Text>
             </View>
-            <TouchableOpacity style={styles.infoBarBtn} onPress={() => setDetailMarker(selectedMarker)}>
+            <TouchableOpacity
+              style={styles.infoBarBtn}
+              onPress={() => setDetailMarker(selectedMarker)}
+              activeOpacity={0.7}
+            >
               <Text style={styles.infoBarBtnText}>详情</Text>
             </TouchableOpacity>
           </View>
         </View>
       )}
 
+      {/* Legend */}
       {!showWheel && (
         <View style={styles.legend}>
-          <Text style={styles.legendTitle}>场景图例</Text>
           <View style={styles.legendItems}>
             {(['rowing', 'dining', 'hiking', 'shopping', 'selfie', 'beach', 'park', 'city'] as const).map((scene) => (
               <View key={scene} style={styles.legendItem}>
@@ -132,10 +145,12 @@ export default function MapScreen({
         </View>
       )}
 
-      <TouchableOpacity style={styles.fab} onPress={onOpenUploader}>
+      {/* FAB */}
+      <TouchableOpacity style={styles.fab} onPress={onOpenUploader} activeOpacity={0.7}>
         <Text style={styles.fabIcon}>+</Text>
       </TouchableOpacity>
 
+      {/* Detail modal */}
       <Modal visible={detailMarker !== null} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setDetailMarker(null)}>
         {detailMarker && (
           <PhotoDetail
@@ -147,7 +162,6 @@ export default function MapScreen({
         )}
       </Modal>
 
-      {/* Scene confirmation banner */}
       <SceneConfirmBanner
         photo={latestPhoto || null}
         visible={!!latestPhoto}
@@ -162,56 +176,90 @@ export default function MapScreen({
 const styles = StyleSheet.create({
   container: { flex: 1 },
   mapContainer: { flex: 1, paddingTop: 120 },
+
+  // Frosted glass header
   header: {
-    position: 'absolute', top: 50, left: 16, right: 16,
-    backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 16,
-    paddingHorizontal: 20, paddingVertical: 14,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15, shadowRadius: 8, elevation: 5, zIndex: 100,
+    position: 'absolute', top: 50, left: spacing.xl, right: spacing.xl,
+    backgroundColor: colors.frostedWhite, borderRadius: radius.lg,
+    paddingHorizontal: spacing.xl, paddingVertical: spacing.md,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06, shadowRadius: 8, elevation: 3, zIndex: 100,
   },
-  headerTitle: { fontSize: 22, fontWeight: '700', color: '#2C3E50' },
-  headerSubtitle: { fontSize: 13, color: '#7f8c8d', marginTop: 2 },
-  markerContainer: { alignItems: 'center' },
+  headerTitle: { ...typography.title2, color: colors.textPrimary },
+  headerSubtitle: { ...typography.caption1, color: colors.textSecondary, marginTop: 2 },
+
+  // Info bar
   infoBar: {
-    position: 'absolute', bottom: 100, left: 16, right: 16,
-    backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 16,
-    paddingHorizontal: 16, paddingVertical: 12,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15, shadowRadius: 8, elevation: 5, zIndex: 100,
+    position: 'absolute', bottom: 100, left: spacing.xl, right: spacing.xl,
+    backgroundColor: colors.frostedWhite, borderRadius: radius.lg,
+    paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06, shadowRadius: 8, elevation: 3, zIndex: 100,
   },
   infoBarContent: { flexDirection: 'row', alignItems: 'center' },
-  infoBarEmoji: { fontSize: 28, marginRight: 12 },
+  infoBarEmoji: { fontSize: 24, marginRight: spacing.md },
   infoBarText: { flex: 1 },
-  infoBarTitle: { fontSize: 15, fontWeight: '600', color: '#2C3E50' },
-  infoBarDesc: { fontSize: 12, color: '#7f8c8d', marginTop: 2 },
-  infoBarBtn: { backgroundColor: '#4ECDC4', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
-  infoBarBtnText: { color: 'white', fontWeight: '600', fontSize: 13 },
-  legend: {
-    position: 'absolute', bottom: 30, left: 16, right: 16,
-    backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 16,
-    paddingHorizontal: 16, paddingVertical: 12,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15, shadowRadius: 8, elevation: 5, zIndex: 100,
+  infoBarTitle: { ...typography.headline, color: colors.textPrimary },
+  infoBarDesc: { ...typography.caption1, color: colors.textSecondary, marginTop: 2 },
+  infoBarBtn: {
+    backgroundColor: colors.accent,
+    paddingHorizontal: spacing.lg, paddingVertical: spacing.sm + 2,
+    borderRadius: radius.xl,
   },
-  legendTitle: { fontSize: 12, color: '#7f8c8d', marginBottom: 8 },
-  legendItems: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  legendEmoji: { fontSize: 14 },
-  legendLabel: { fontSize: 12, color: '#333' },
+  infoBarBtnText: { color: colors.textOnAccent, ...typography.subhead, fontWeight: '600' },
+
+  // Legend
+  legend: {
+    position: 'absolute', bottom: 30, left: spacing.xl, right: spacing.xl,
+    backgroundColor: colors.frostedWhite, borderRadius: radius.lg,
+    paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06, shadowRadius: 8, elevation: 3, zIndex: 100,
+  },
+  legendItems: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  legendEmoji: { fontSize: 13 },
+  legendLabel: { ...typography.caption1, color: colors.textSecondary },
+
+  // FAB
   fab: {
     position: 'absolute', bottom: 100, right: 20,
-    width: 56, height: 56, borderRadius: 28, backgroundColor: '#4ECDC4',
+    width: 52, height: 52, borderRadius: 26,
+    backgroundColor: colors.background,
     justifyContent: 'center', alignItems: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2, shadowRadius: 8, elevation: 6, zIndex: 200,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12, shadowRadius: 8, elevation: 4, zIndex: 200,
+    borderWidth: 0.5, borderColor: colors.separator,
   },
-  fabIcon: { fontSize: 28, color: 'white', fontWeight: '300', marginTop: -2 },
-  emptyContainer: { flex: 1, backgroundColor: '#f8f9fa' },
-  emptyHeader: { paddingTop: 60, paddingBottom: 24, paddingHorizontal: 20, backgroundColor: '#4ECDC4' },
-  emptyContent: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
-  emptyEmoji: { fontSize: 80, marginBottom: 20 },
-  emptyTitle: { fontSize: 24, fontWeight: '700', color: '#2C3E50', marginBottom: 8 },
-  emptySubtitle: { fontSize: 15, color: '#7f8c8d', textAlign: 'center', lineHeight: 22, marginBottom: 32 },
-  emptyBtn: { backgroundColor: '#4ECDC4', borderRadius: 16, paddingHorizontal: 32, paddingVertical: 16 },
-  emptyBtnText: { fontSize: 17, fontWeight: '600', color: 'white' },
+  fabIcon: { fontSize: 26, color: colors.accent, fontWeight: '300', marginTop: -1 },
+
+  // Empty state
+  emptyContainer: { flex: 1, backgroundColor: colors.surface },
+  emptyHeader: {
+    paddingTop: 60, paddingBottom: spacing.xxl, paddingHorizontal: spacing.xl,
+    backgroundColor: colors.background,
+  },
+  emptyHeaderTitle: { ...typography.title1, color: colors.textPrimary },
+  emptyHeaderSub: { ...typography.subhead, color: colors.textSecondary, marginTop: spacing.xs },
+  emptyContent: {
+    flex: 1, justifyContent: 'center', alignItems: 'center',
+    paddingHorizontal: spacing.xxxl,
+  },
+  emptyIconCircle: {
+    width: 80, height: 80, borderRadius: 40,
+    backgroundColor: colors.accentLight,
+    justifyContent: 'center', alignItems: 'center',
+    marginBottom: spacing.xl,
+  },
+  emptyIcon: { fontSize: 36, color: colors.accent, fontWeight: '300' },
+  emptyTitle: { ...typography.title2, color: colors.textPrimary, marginBottom: spacing.sm },
+  emptySubtitle: {
+    ...typography.subhead, color: colors.textSecondary,
+    textAlign: 'center', lineHeight: 22, marginBottom: spacing.xxxl,
+  },
+  emptyBtn: {
+    backgroundColor: colors.accent, borderRadius: radius.md,
+    paddingHorizontal: spacing.xxxl, paddingVertical: spacing.lg,
+  },
+  emptyBtnText: { ...typography.headline, color: colors.textOnAccent },
 });

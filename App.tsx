@@ -7,6 +7,7 @@ import MapScreen from './src/screens/MapScreen';
 import TimelineScreen from './src/screens/TimelineScreen';
 import PhotoUploader from './src/components/PhotoUploader';
 import { reverseGeocode } from './src/services/amapService';
+import { colors, typography } from './src/theme/appleTheme';
 
 type Screen = 'map' | 'timeline';
 
@@ -23,7 +24,6 @@ export default function App() {
         setLatestPhoto(photos[0]);
       }
 
-      // 异步逆地理编码：为没有地址的照片补充高德地址信息
       photos.forEach(async (photo) => {
         if (photo.location.placeName || !photo.location.latitude || !photo.location.longitude) return;
         try {
@@ -79,30 +79,31 @@ export default function App() {
         />
       )}
 
-      {/* Bottom Tab Bar */}
+      {/* Bottom Tab Bar — Apple style */}
       <View style={styles.tabBar}>
         <TouchableOpacity
-          style={[styles.tab, currentScreen === 'map' && styles.tabActive]}
+          style={styles.tab}
           onPress={() => setCurrentScreen('map')}
+          activeOpacity={0.6}
         >
-          <Text style={styles.tabIcon}>&#x1F5FA;</Text>
           <Text style={[styles.tabLabel, currentScreen === 'map' && styles.tabLabelActive]}>
             地图
           </Text>
+          {currentScreen === 'map' && <View style={styles.tabDot} />}
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.tab, currentScreen === 'timeline' && styles.tabActive]}
+          style={styles.tab}
           onPress={() => setCurrentScreen('timeline')}
+          activeOpacity={0.6}
         >
-          <Text style={styles.tabIcon}>&#x1F4C5;</Text>
           <Text style={[styles.tabLabel, currentScreen === 'timeline' && styles.tabLabelActive]}>
             回忆
           </Text>
+          {currentScreen === 'timeline' && <View style={styles.tabDot} />}
         </TouchableOpacity>
       </View>
 
-      {/* Photo Uploader Modal */}
       <PhotoUploader
         visible={showUploader}
         onClose={() => setShowUploader(false)}
@@ -113,18 +114,28 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
+  container: { flex: 1, backgroundColor: colors.background },
   tabBar: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
-    flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.98)',
-    paddingBottom: 28, paddingTop: 8,
-    borderTopWidth: 1, borderTopColor: '#f0f0f0',
-    shadowColor: '#000', shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.05, shadowRadius: 4, elevation: 5,
+    flexDirection: 'row',
+    backgroundColor: colors.frostedWhite,
+    paddingBottom: 28, paddingTop: 10,
+    borderTopWidth: 0.5, borderTopColor: colors.separator,
   },
-  tab: { flex: 1, alignItems: 'center', paddingVertical: 4 },
-  tabActive: { borderTopWidth: 2, borderTopColor: '#4ECDC4' },
-  tabIcon: { fontSize: 22 },
-  tabLabel: { fontSize: 11, color: '#999', marginTop: 2 },
-  tabLabelActive: { color: '#4ECDC4', fontWeight: '600' },
+  tab: {
+    flex: 1, alignItems: 'center', paddingVertical: 4,
+  },
+  tabLabel: {
+    ...typography.caption1,
+    color: colors.textTertiary,
+  },
+  tabLabelActive: {
+    color: colors.accent,
+    fontWeight: '600',
+  },
+  tabDot: {
+    width: 5, height: 5, borderRadius: 2.5,
+    backgroundColor: colors.accent,
+    marginTop: 4,
+  },
 });

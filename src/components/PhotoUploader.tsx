@@ -9,7 +9,6 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
-  Platform,
 } from 'react-native';
 import { Photo, PhotoLocation, SceneType } from '../types';
 import {
@@ -24,6 +23,7 @@ import {
 import { detectSceneWithConfidence } from '../services/sceneDetector';
 import SceneSelector from './SceneSelector';
 import LocationPicker from './LocationPicker';
+import { colors, typography, spacing, radius } from '../theme/appleTheme';
 
 type UploadStep = 'pick' | 'review' | 'location' | 'processing';
 
@@ -59,12 +59,9 @@ export default function PhotoUploader({ visible, onClose, onPhotosAdded }: Photo
     onClose();
   }, [reset, onClose]);
 
-  // Step 1: Pick photos
   const handlePickFromGallery = useCallback(async () => {
     try {
-      console.log('[PhotoUploader] Starting pick from gallery...');
       const picked = await pickPhotos();
-      console.log('[PhotoUploader] Picked photos:', picked.length);
       if (picked.length === 0) return;
 
       const pending: PendingPhoto[] = picked.map((p) => {
@@ -78,12 +75,10 @@ export default function PhotoUploader({ visible, onClose, onPhotosAdded }: Photo
         };
       });
 
-      console.log('[PhotoUploader] Setting pending photos, moving to review');
       setPendingPhotos(pending);
       setCurrentIndex(0);
       setStep('review');
     } catch (error: any) {
-      console.error('[PhotoUploader] Error:', error);
       Alert.alert('错误', error.message || '选择照片失败');
     }
   }, []);
@@ -112,7 +107,6 @@ export default function PhotoUploader({ visible, onClose, onPhotosAdded }: Photo
     }
   }, []);
 
-  // Step 2: Review and edit scene
   const handleSceneSelect = useCallback((scene: SceneType) => {
     setPendingPhotos((prev) =>
       prev.map((p, i) => (i === currentIndex ? { ...p, selectedScene: scene } : p))
@@ -121,14 +115,10 @@ export default function PhotoUploader({ visible, onClose, onPhotosAdded }: Photo
 
   const handleNext = useCallback(() => {
     const current = pendingPhotos[currentIndex];
-
-    // If no location, go to location picker
     if (!current.detectedLocation && !current.manualLocation) {
       setStep('location');
       return;
     }
-
-    // Move to next photo or process all
     if (currentIndex < pendingPhotos.length - 1) {
       setCurrentIndex((prev) => prev + 1);
     } else {
@@ -137,7 +127,6 @@ export default function PhotoUploader({ visible, onClose, onPhotosAdded }: Photo
   }, [currentIndex, pendingPhotos]);
 
   const handleSkip = useCallback(() => {
-    // Skip this photo
     if (currentIndex < pendingPhotos.length - 1) {
       setCurrentIndex((prev) => prev + 1);
     } else {
@@ -145,14 +134,11 @@ export default function PhotoUploader({ visible, onClose, onPhotosAdded }: Photo
     }
   }, [currentIndex, pendingPhotos.length]);
 
-  // Step 3: Location picker
   const handleLocationSelect = useCallback((location: PhotoLocation) => {
     setPendingPhotos((prev) =>
       prev.map((p, i) => (i === currentIndex ? { ...p, manualLocation: location } : p))
     );
     setStep('review');
-
-    // Auto advance
     setTimeout(() => {
       if (currentIndex < pendingPhotos.length - 1) {
         setCurrentIndex((prev) => prev + 1);
@@ -163,13 +149,11 @@ export default function PhotoUploader({ visible, onClose, onPhotosAdded }: Photo
   }, [currentIndex, pendingPhotos.length]);
 
   const handleSkipLocation = useCallback(() => {
-    // Use a default location
     const defaultLocation: PhotoLocation = { latitude: 39.9042, longitude: 116.4074 };
     setPendingPhotos((prev) =>
       prev.map((p, i) => (i === currentIndex ? { ...p, manualLocation: defaultLocation } : p))
     );
     setStep('review');
-
     setTimeout(() => {
       if (currentIndex < pendingPhotos.length - 1) {
         setCurrentIndex((prev) => prev + 1);
@@ -179,7 +163,6 @@ export default function PhotoUploader({ visible, onClose, onPhotosAdded }: Photo
     }, 100);
   }, [currentIndex, pendingPhotos.length]);
 
-  // Process all photos
   const processAllPhotos = useCallback(async () => {
     setIsProcessing(true);
     setStep('processing');
@@ -192,10 +175,7 @@ export default function PhotoUploader({ visible, onClose, onPhotosAdded }: Photo
           pending.manualLocation || undefined,
           pending.selectedScene
         );
-        // Mark the first photo as daily pick
-        if (processed.length === 0) {
-          photo.isDailyPick = true;
-        }
+        if (processed.length === 0) photo.isDailyPick = true;
         processed.push(photo);
       }
 
@@ -211,45 +191,31 @@ export default function PhotoUploader({ visible, onClose, onPhotosAdded }: Photo
   const currentPhoto = pendingPhotos[currentIndex];
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={handleClose}
-    >
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleClose}>
       <View style={styles.container}>
         {/* Step: Pick photos */}
         {step === 'pick' && (
           <View style={styles.stepContainer}>
             <View style={styles.header}>
               <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
-                <Text style={styles.closeBtnText}>&#x2715;</Text>
+                <Text style={styles.closeBtnText}>✕</Text>
               </TouchableOpacity>
               <Text style={styles.title}>添加照片</Text>
-              <View style={{ width: 36 }} />
+              <View style={{ width: 32 }} />
             </View>
 
             <View style={styles.pickContent}>
-              <Text style={styles.pickEmoji}>&#x1F4F7;</Text>
               <Text style={styles.pickTitle}>选择照片来源</Text>
               <Text style={styles.pickSubtitle}>
                 照片会自动提取位置信息，在地图上生成回忆标记
               </Text>
 
-              <TouchableOpacity
-                style={styles.pickBtn}
-                onPress={handlePickFromGallery}
-              >
-                <Text style={styles.pickBtnIcon}>&#x1F5BC;</Text>
+              <TouchableOpacity style={styles.pickBtn} onPress={handlePickFromGallery} activeOpacity={0.7}>
                 <Text style={styles.pickBtnText}>从相册选择</Text>
                 <Text style={styles.pickBtnHint}>支持多选</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.pickBtn, styles.pickBtnAlt]}
-                onPress={handleTakePhoto}
-              >
-                <Text style={styles.pickBtnIcon}>&#x1F4F8;</Text>
+              <TouchableOpacity style={[styles.pickBtn, styles.pickBtnAlt]} onPress={handleTakePhoto} activeOpacity={0.7}>
                 <Text style={styles.pickBtnText}>拍照</Text>
                 <Text style={styles.pickBtnHint}>立即拍摄</Text>
               </TouchableOpacity>
@@ -262,57 +228,42 @@ export default function PhotoUploader({ visible, onClose, onPhotosAdded }: Photo
           <View style={styles.stepContainer}>
             <View style={styles.header}>
               <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
-                <Text style={styles.closeBtnText}>&#x2715;</Text>
+                <Text style={styles.closeBtnText}>✕</Text>
               </TouchableOpacity>
-              <Text style={styles.title}>
-                {currentIndex + 1} / {pendingPhotos.length}
-              </Text>
-              <TouchableOpacity
-                onPress={handleSkip}
-                style={styles.skipBtn}
-              >
+              <Text style={styles.title}>{currentIndex + 1} / {pendingPhotos.length}</Text>
+              <TouchableOpacity onPress={handleSkip} style={styles.skipBtn}>
                 <Text style={styles.skipText}>跳过</Text>
               </TouchableOpacity>
             </View>
 
-            <ScrollView
-              style={styles.reviewContent}
-              showsVerticalScrollIndicator={false}
-            >
-              {/* Photo preview */}
-              <Image
-                source={{ uri: currentPhoto.picked.uri }}
-                style={styles.preview}
-                resizeMode="contain"
-              />
+            <ScrollView style={styles.reviewContent} showsVerticalScrollIndicator={false}>
+              <Image source={{ uri: currentPhoto.picked.uri }} style={styles.preview} resizeMode="contain" />
 
-              {/* Info card */}
-              <View style={styles.infoCard}>
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>&#x1F4F8; 拍摄日期</Text>
-                  <Text style={styles.infoValue}>
-                    {extractDate(currentPhoto.picked)}
-                  </Text>
+              {/* Info — grouped list style */}
+              <View style={styles.groupedCard}>
+                <View style={styles.groupedRow}>
+                  <Text style={styles.groupedLabel}>拍摄日期</Text>
+                  <Text style={styles.groupedValue}>{extractDate(currentPhoto.picked)}</Text>
                 </View>
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>&#x1F4CD; 位置信息</Text>
-                  <Text style={styles.infoValue}>
+                <View style={styles.groupedSeparator} />
+                <View style={styles.groupedRow}>
+                  <Text style={styles.groupedLabel}>位置信息</Text>
+                  <Text style={styles.groupedValue}>
                     {currentPhoto.detectedLocation || currentPhoto.manualLocation
                       ? `${(currentPhoto.detectedLocation || currentPhoto.manualLocation)!.latitude.toFixed(4)}, ${(currentPhoto.detectedLocation || currentPhoto.manualLocation)!.longitude.toFixed(4)}`
                       : '未检测到'}
                   </Text>
                 </View>
                 {!currentPhoto.detectedLocation && !currentPhoto.manualLocation && (
-                  <TouchableOpacity
-                    style={styles.addLocationBtn}
-                    onPress={() => setStep('location')}
-                  >
-                    <Text style={styles.addLocationText}>+ 手动添加位置</Text>
-                  </TouchableOpacity>
+                  <>
+                    <View style={styles.groupedSeparator} />
+                    <TouchableOpacity style={styles.addLocationBtn} onPress={() => setStep('location')}>
+                      <Text style={styles.addLocationText}>手动添加位置</Text>
+                    </TouchableOpacity>
+                  </>
                 )}
               </View>
 
-              {/* Scene selector */}
               <SceneSelector
                 selectedScene={currentPhoto.selectedScene}
                 recommendedScene={currentPhoto.detectedScene}
@@ -322,12 +273,8 @@ export default function PhotoUploader({ visible, onClose, onPhotosAdded }: Photo
               <View style={{ height: 20 }} />
             </ScrollView>
 
-            {/* Bottom buttons */}
             <View style={styles.bottomBar}>
-              <TouchableOpacity
-                style={styles.confirmBtn}
-                onPress={handleNext}
-              >
+              <TouchableOpacity style={styles.confirmBtn} onPress={handleNext} activeOpacity={0.7}>
                 <Text style={styles.confirmBtnText}>
                   {currentIndex < pendingPhotos.length - 1 ? '下一张' : '完成'}
                 </Text>
@@ -338,20 +285,15 @@ export default function PhotoUploader({ visible, onClose, onPhotosAdded }: Photo
 
         {/* Step: Location picker */}
         {step === 'location' && (
-          <LocationPicker
-            onSelect={handleLocationSelect}
-            onCancel={() => setStep('review')}
-          />
+          <LocationPicker onSelect={handleLocationSelect} onCancel={() => setStep('review')} />
         )}
 
         {/* Step: Processing */}
         {step === 'processing' && (
           <View style={styles.processingContainer}>
-            <ActivityIndicator size="large" color="#4ECDC4" />
+            <ActivityIndicator size="large" color={colors.accent} />
             <Text style={styles.processingText}>正在处理照片...</Text>
-            <Text style={styles.processingSubtext}>
-              提取位置信息，生成地图标记
-            </Text>
+            <Text style={styles.processingSubtext}>提取位置信息，生成地图标记</Text>
           </View>
         )}
       </View>
@@ -360,177 +302,70 @@ export default function PhotoUploader({ visible, onClose, onPhotosAdded }: Photo
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f8f9fa',
-  },
-  stepContainer: {
-    flex: 1,
-  },
+  container: { flex: 1, backgroundColor: colors.surface },
+  stepContainer: { flex: 1 },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 50,
-    paddingBottom: 16,
-    paddingHorizontal: 16,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingTop: 50, paddingBottom: spacing.lg, paddingHorizontal: spacing.xl,
+    backgroundColor: colors.background,
+    borderBottomWidth: 0.5, borderBottomColor: colors.separator,
   },
   closeBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#f0f0f0',
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: colors.surface, justifyContent: 'center', alignItems: 'center',
   },
-  closeBtnText: {
-    fontSize: 18,
-    color: '#666',
-    fontWeight: '600',
-  },
-  title: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#2C3E50',
-  },
-  skipBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-  },
-  skipText: {
-    fontSize: 15,
-    color: '#999',
-  },
+  closeBtnText: { fontSize: 16, color: colors.textSecondary, fontWeight: '600' },
+  title: { ...typography.headline, color: colors.textPrimary },
+  skipBtn: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
+  skipText: { ...typography.subhead, color: colors.textSecondary },
   pickContent: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 32,
+    flex: 1, justifyContent: 'center', alignItems: 'center',
+    paddingHorizontal: spacing.xxxl,
   },
-  pickEmoji: {
-    fontSize: 64,
-    marginBottom: 16,
-  },
-  pickTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#2C3E50',
-    marginBottom: 8,
-  },
+  pickTitle: { ...typography.title2, color: colors.textPrimary, marginBottom: spacing.sm },
   pickSubtitle: {
-    fontSize: 14,
-    color: '#7f8c8d',
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 32,
+    ...typography.subhead, color: colors.textSecondary,
+    textAlign: 'center', lineHeight: 22, marginBottom: spacing.xxxl,
   },
   pickBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#4ECDC4',
-    borderRadius: 16,
-    paddingHorizontal: 24,
-    paddingVertical: 18,
-    width: '100%',
-    marginBottom: 14,
-    gap: 14,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.accent, borderRadius: radius.md,
+    paddingHorizontal: spacing.xxl, paddingVertical: spacing.lg,
+    width: '100%', marginBottom: spacing.md,
   },
-  pickBtnAlt: {
-    backgroundColor: '#2C3E50',
-  },
-  pickBtnIcon: {
-    fontSize: 24,
-  },
-  pickBtnText: {
-    flex: 1,
-    fontSize: 17,
-    fontWeight: '600',
-    color: 'white',
-  },
-  pickBtnHint: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.7)',
-  },
-  reviewContent: {
-    flex: 1,
-    paddingHorizontal: 16,
-  },
+  pickBtnAlt: { backgroundColor: colors.background, borderWidth: 1, borderColor: colors.accent },
+  pickBtnText: { ...typography.headline, color: colors.textOnAccent },
+  pickBtnHint: { ...typography.caption1, color: 'rgba(255,255,255,0.6)', marginLeft: spacing.sm },
+  reviewContent: { flex: 1, paddingHorizontal: spacing.xl },
   preview: {
-    width: '100%',
-    height: 280,
-    borderRadius: 16,
-    backgroundColor: '#e0e0e0',
-    marginTop: 16,
-    marginBottom: 16,
+    width: '100%', height: 280, borderRadius: radius.lg,
+    backgroundColor: colors.surface, marginTop: spacing.xl, marginBottom: spacing.xl,
   },
-  infoCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
+  groupedCard: {
+    backgroundColor: colors.background, borderRadius: radius.md,
+    borderWidth: 0.5, borderColor: colors.separator,
+    overflow: 'hidden', marginBottom: spacing.xl,
   },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f5f5f5',
+  groupedRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
   },
-  infoLabel: {
-    fontSize: 14,
-    color: '#666',
-  },
-  infoValue: {
-    fontSize: 14,
-    color: '#333',
-    fontWeight: '500',
-  },
-  addLocationBtn: {
-    marginTop: 8,
-    paddingVertical: 8,
-    alignItems: 'center',
-  },
-  addLocationText: {
-    fontSize: 14,
-    color: '#4ECDC4',
-    fontWeight: '600',
-  },
+  groupedLabel: { ...typography.subhead, color: colors.textSecondary },
+  groupedValue: { ...typography.subhead, color: colors.textPrimary },
+  groupedSeparator: { height: 0.5, backgroundColor: colors.separator, marginLeft: spacing.lg },
+  addLocationBtn: { paddingVertical: spacing.md, alignItems: 'center' },
+  addLocationText: { ...typography.subhead, color: colors.accent, fontWeight: '600' },
   bottomBar: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    paddingBottom: 32,
-    backgroundColor: 'white',
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
+    paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, paddingBottom: spacing.xxxl,
+    backgroundColor: colors.background,
+    borderTopWidth: 0.5, borderTopColor: colors.separator,
   },
   confirmBtn: {
-    backgroundColor: '#4ECDC4',
-    borderRadius: 14,
-    paddingVertical: 16,
-    alignItems: 'center',
+    backgroundColor: colors.accent, borderRadius: radius.md,
+    paddingVertical: spacing.lg, alignItems: 'center',
   },
-  confirmBtnText: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: 'white',
-  },
-  processingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 16,
-  },
-  processingText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#2C3E50',
-  },
-  processingSubtext: {
-    fontSize: 14,
-    color: '#7f8c8d',
-  },
+  confirmBtnText: { ...typography.headline, color: colors.textOnAccent },
+  processingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: spacing.lg },
+  processingText: { ...typography.title3, color: colors.textPrimary },
+  processingSubtext: { ...typography.subhead, color: colors.textSecondary },
 });

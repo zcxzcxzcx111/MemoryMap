@@ -6,8 +6,9 @@ import {
   FlatList,
   TouchableOpacity,
 } from 'react-native';
-import { Photo, DayStory, SceneMarker } from '../types';
+import { Photo, DayStory } from '../types';
 import DailySummary from '../components/DailySummary';
+import { colors, typography, spacing, radius } from '../theme/appleTheme';
 
 interface TimelineScreenProps {
   photos: Photo[];
@@ -34,15 +35,16 @@ export default function TimelineScreen({
           <Text style={styles.headerTitle}>时光回忆</Text>
           <Text style={styles.headerSubtitle}>你的旅行足迹</Text>
         </View>
-
         <View style={styles.emptyContent}>
-          <Text style={styles.emptyEmoji}>&#x1F4C5;</Text>
+          <View style={styles.emptyIconCircle}>
+            <Text style={styles.emptyIcon}>+</Text>
+          </View>
           <Text style={styles.emptyTitle}>还没有回忆</Text>
           <Text style={styles.emptySubtitle}>
-            上传你的旅行照片{'\n'}生成每日回忆故事
+            上传你的旅行照片，生成每日回忆故事
           </Text>
-          <TouchableOpacity style={styles.emptyBtn} onPress={onOpenUploader}>
-            <Text style={styles.emptyBtnText}>&#x1F4F7; 开始上传</Text>
+          <TouchableOpacity style={styles.emptyBtn} onPress={onOpenUploader} activeOpacity={0.7}>
+            <Text style={styles.emptyBtnText}>开始上传</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -73,15 +75,15 @@ export default function TimelineScreen({
         </View>
       </View>
 
-      {/* Map Button */}
-      <TouchableOpacity style={styles.mapBtn} onPress={onNavigateToMap}>
-        <Text style={styles.mapBtnText}>&#x1F5FA; 在地图上查看</Text>
-      </TouchableOpacity>
-
-      {/* Upload Button */}
-      <TouchableOpacity style={styles.uploadBtn} onPress={onOpenUploader}>
-        <Text style={styles.uploadBtnText}>+ 添加更多照片</Text>
-      </TouchableOpacity>
+      {/* Actions */}
+      <View style={styles.actions}>
+        <TouchableOpacity style={styles.mapBtn} onPress={onNavigateToMap} activeOpacity={0.7}>
+          <Text style={styles.mapBtnText}>在地图上查看</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.uploadBtn} onPress={onOpenUploader} activeOpacity={0.7}>
+          <Text style={styles.uploadBtnText}>添加更多照片</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Day Stories */}
       <FlatList
@@ -98,52 +100,61 @@ export default function TimelineScreen({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8f9fa' },
+  container: { flex: 1, backgroundColor: colors.surface },
   header: {
-    backgroundColor: '#4ECDC4', paddingTop: 60, paddingBottom: 24,
-    paddingHorizontal: 20,
+    backgroundColor: colors.background,
+    paddingTop: 60, paddingBottom: spacing.xl,
+    paddingHorizontal: spacing.xl,
   },
-  headerTitle: { fontSize: 28, fontWeight: '700', color: 'white' },
-  headerSubtitle: { fontSize: 14, color: 'rgba(255,255,255,0.8)', marginTop: 4 },
+  headerTitle: { ...typography.title1, color: colors.textPrimary },
+  headerSubtitle: { ...typography.subhead, color: colors.textSecondary, marginTop: spacing.xs },
   statsRow: {
-    flexDirection: 'row', paddingHorizontal: 16, marginTop: -16, gap: 12,
+    flexDirection: 'row', paddingHorizontal: spacing.xl,
+    paddingTop: spacing.lg, gap: spacing.md,
   },
   statCard: {
-    flex: 1, backgroundColor: 'white', borderRadius: 12,
-    paddingVertical: 16, alignItems: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08, shadowRadius: 4, elevation: 2,
+    flex: 1, backgroundColor: colors.background, borderRadius: radius.md,
+    paddingVertical: spacing.lg, alignItems: 'center',
+    borderWidth: 0.5, borderColor: colors.separator,
   },
-  statNumber: { fontSize: 24, fontWeight: '700', color: '#2C3E50' },
-  statLabel: { fontSize: 12, color: '#7f8c8d', marginTop: 4 },
+  statNumber: { ...typography.title2, color: colors.textPrimary },
+  statLabel: { ...typography.caption1, color: colors.textSecondary, marginTop: spacing.xs },
+  actions: {
+    flexDirection: 'row', paddingHorizontal: spacing.xl,
+    paddingTop: spacing.lg, gap: spacing.md,
+  },
   mapBtn: {
-    marginHorizontal: 16, marginTop: 16,
-    backgroundColor: '#2C3E50', borderRadius: 12,
-    paddingVertical: 14, alignItems: 'center',
+    flex: 1, backgroundColor: colors.accent, borderRadius: radius.md,
+    paddingVertical: spacing.md, alignItems: 'center',
   },
-  mapBtnText: { color: 'white', fontSize: 16, fontWeight: '600' },
+  mapBtnText: { ...typography.headline, color: colors.textOnAccent },
   uploadBtn: {
-    marginHorizontal: 16, marginTop: 10,
-    backgroundColor: 'white', borderRadius: 12,
-    paddingVertical: 12, alignItems: 'center',
-    borderWidth: 1.5, borderColor: '#4ECDC4', borderStyle: 'dashed',
+    flex: 1, backgroundColor: colors.background, borderRadius: radius.md,
+    paddingVertical: spacing.md, alignItems: 'center',
+    borderWidth: 1, borderColor: colors.accent,
   },
-  uploadBtnText: { color: '#4ECDC4', fontSize: 14, fontWeight: '600' },
-  listContent: { paddingTop: 8, paddingBottom: 100 },
-  emptyContainer: { flex: 1, backgroundColor: '#f8f9fa' },
+  uploadBtnText: { ...typography.headline, color: colors.accent },
+  listContent: { paddingTop: spacing.md, paddingBottom: 100 },
+  emptyContainer: { flex: 1, backgroundColor: colors.surface },
   emptyContent: {
     flex: 1, justifyContent: 'center', alignItems: 'center',
-    paddingHorizontal: 32,
+    paddingHorizontal: spacing.xxxl,
   },
-  emptyEmoji: { fontSize: 80, marginBottom: 20 },
-  emptyTitle: { fontSize: 24, fontWeight: '700', color: '#2C3E50', marginBottom: 8 },
+  emptyIconCircle: {
+    width: 80, height: 80, borderRadius: 40,
+    backgroundColor: colors.accentLight,
+    justifyContent: 'center', alignItems: 'center',
+    marginBottom: spacing.xl,
+  },
+  emptyIcon: { fontSize: 36, color: colors.accent, fontWeight: '300' },
+  emptyTitle: { ...typography.title2, color: colors.textPrimary, marginBottom: spacing.sm },
   emptySubtitle: {
-    fontSize: 15, color: '#7f8c8d', textAlign: 'center',
-    lineHeight: 22, marginBottom: 32,
+    ...typography.subhead, color: colors.textSecondary,
+    textAlign: 'center', lineHeight: 22, marginBottom: spacing.xxxl,
   },
   emptyBtn: {
-    backgroundColor: '#4ECDC4', borderRadius: 16,
-    paddingHorizontal: 32, paddingVertical: 16,
+    backgroundColor: colors.accent, borderRadius: radius.md,
+    paddingHorizontal: spacing.xxxl, paddingVertical: spacing.lg,
   },
-  emptyBtnText: { fontSize: 17, fontWeight: '600', color: 'white' },
+  emptyBtnText: { ...typography.headline, color: colors.textOnAccent },
 });

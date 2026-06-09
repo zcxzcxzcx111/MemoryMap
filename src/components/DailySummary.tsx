@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import { DayStory } from '../types';
 import { sceneEmoji } from '../data/mockPhotos';
+import { colors, typography, spacing, radius } from '../theme/appleTheme';
 
 interface DailySummaryProps {
   story: DayStory;
@@ -22,36 +23,24 @@ export default function DailySummary({ story, onPress }: DailySummaryProps) {
 
   return (
     <TouchableOpacity style={styles.container} onPress={onPress} activeOpacity={0.8}>
-      {/* Daily Pick Image */}
       {dailyPickPhoto && (
-        <Image
-          source={{ uri: dailyPickPhoto.uri }}
-          style={styles.image}
-          resizeMode="cover"
-        />
+        <Image source={{ uri: dailyPickPhoto.uri }} style={styles.image} resizeMode="cover" />
       )}
-
-      {/* Content */}
       <View style={styles.content}>
         <View style={styles.dateRow}>
           <Text style={styles.date}>{formatDate(story.date)}</Text>
           <View style={styles.sceneRow}>
             {scenes.slice(0, 4).map((scene) => (
-              <Text key={scene} style={styles.sceneEmoji}>
-                {sceneEmoji[scene]}
-              </Text>
+              <View key={scene} style={styles.scenePill}>
+                <Text style={styles.sceneEmoji}>{sceneEmoji[scene]}</Text>
+              </View>
             ))}
           </View>
         </View>
-
         <Text style={styles.summary}>{story.summary}</Text>
-
-        <View style={styles.stats}>
-          <Text style={styles.statText}>
-            {story.markers.length} 个地点 ·{' '}
-            {story.markers.reduce((acc, m) => acc + m.photos.length, 0)} 张照片
-          </Text>
-        </View>
+        <Text style={styles.stats}>
+          {story.markers.length} 个地点 · {story.markers.reduce((acc, m) => acc + m.photos.length, 0)} 张照片
+        </Text>
       </View>
     </TouchableOpacity>
   );
@@ -59,54 +48,29 @@ export default function DailySummary({ story, onPress }: DailySummaryProps) {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    marginHorizontal: 16,
-    marginVertical: 8,
+    backgroundColor: colors.background,
+    borderRadius: radius.lg,
+    marginHorizontal: spacing.xl,
+    marginVertical: spacing.sm,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 3,
+    borderWidth: 0.5, borderColor: colors.separator,
   },
-  image: {
-    width: '100%',
-    height: 180,
-  },
-  content: {
-    padding: 16,
-  },
+  image: { width: '100%', height: 180 },
+  content: { padding: spacing.lg },
   dateRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginBottom: spacing.sm,
   },
-  date: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#2C3E50',
+  date: { ...typography.headline, color: colors.textPrimary },
+  sceneRow: { flexDirection: 'row', gap: spacing.xs },
+  scenePill: {
+    backgroundColor: colors.surface, borderRadius: radius.sm,
+    paddingHorizontal: spacing.xs + 1, paddingVertical: 1,
   },
-  sceneRow: {
-    flexDirection: 'row',
-    gap: 4,
-  },
-  sceneEmoji: {
-    fontSize: 18,
-  },
+  sceneEmoji: { fontSize: 14 },
   summary: {
-    fontSize: 14,
-    color: '#555',
-    lineHeight: 20,
-    marginBottom: 8,
+    ...typography.subhead, color: colors.textSecondary,
+    lineHeight: 20, marginBottom: spacing.sm,
   },
-  stats: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  statText: {
-    fontSize: 12,
-    color: '#999',
-  },
+  stats: { ...typography.caption1, color: colors.textTertiary },
 });

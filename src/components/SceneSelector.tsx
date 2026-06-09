@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SceneType } from '../types';
 import { getAllSceneOptions } from '../services/sceneDetector';
+import { colors, typography, spacing, radius } from '../theme/appleTheme';
 
 interface SceneSelectorProps {
   selectedScene: SceneType;
@@ -37,26 +38,19 @@ export default function SceneSelector({
             <TouchableOpacity
               key={option.scene}
               style={[
-                styles.card,
-                isSelected && styles.cardSelected,
-                isRecommended && !isSelected && styles.cardRecommended,
+                styles.chip,
+                isSelected && styles.chipSelected,
+                !isSelected && isRecommended && styles.chipRecommended,
               ]}
               onPress={() => onSelect(option.scene)}
-              activeOpacity={0.7}
+              activeOpacity={0.6}
             >
-              <Text style={styles.emoji}>{option.emoji}</Text>
-              <Text
-                style={[
-                  styles.cardText,
-                  isSelected && styles.cardTextSelected,
-                ]}
-              >
+              <Text style={styles.chipEmoji}>{option.emoji}</Text>
+              <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
                 {option.name}
               </Text>
               {isRecommended && !isSelected && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>AI</Text>
-                </View>
+                <Text style={styles.recommendLabel}>推荐</Text>
               )}
             </TouchableOpacity>
           );
@@ -67,73 +61,27 @@ export default function SceneSelector({
 }
 
 const styles = StyleSheet.create({
-  container: {
-    marginBottom: 16,
+  container: { marginBottom: spacing.lg },
+  title: { ...typography.headline, color: colors.textPrimary, marginBottom: spacing.xs },
+  hint: { ...typography.caption1, color: colors.accent, marginBottom: spacing.sm },
+  scrollContent: { gap: spacing.sm, paddingVertical: spacing.xs },
+  chip: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: spacing.sm, paddingHorizontal: spacing.md,
+    borderRadius: radius.pill, backgroundColor: colors.surface,
+    borderWidth: 1, borderColor: 'transparent',
   },
-  title: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#2C3E50',
-    marginBottom: 4,
+  chipSelected: {
+    backgroundColor: colors.accent, borderColor: colors.accent,
   },
-  hint: {
-    fontSize: 12,
-    color: '#4ECDC4',
-    marginBottom: 8,
+  chipRecommended: {
+    borderColor: colors.accentBorder, backgroundColor: colors.accentLight,
   },
-  scrollContent: {
-    gap: 10,
-    paddingVertical: 4,
-  },
-  card: {
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    backgroundColor: '#f5f5f5',
-    minWidth: 70,
-    position: 'relative',
-  },
-  cardSelected: {
-    backgroundColor: '#4ECDC4',
-    shadowColor: '#4ECDC4',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  cardRecommended: {
-    borderWidth: 1.5,
-    borderColor: '#4ECDC4',
-    backgroundColor: '#f0fffe',
-  },
-  emoji: {
-    fontSize: 24,
-    marginBottom: 4,
-  },
-  cardText: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '500',
-  },
-  cardTextSelected: {
-    color: 'white',
-    fontWeight: '700',
-  },
-  badge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    backgroundColor: '#FF6B6B',
-    borderRadius: 8,
-    width: 20,
-    height: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  badgeText: {
-    fontSize: 8,
-    color: 'white',
-    fontWeight: '700',
+  chipEmoji: { fontSize: 16, marginRight: spacing.xs },
+  chipText: { ...typography.subhead, color: colors.textSecondary },
+  chipTextSelected: { color: colors.textOnAccent, fontWeight: '600' },
+  recommendLabel: {
+    ...typography.caption2, color: colors.accent,
+    marginLeft: spacing.xs,
   },
 });
